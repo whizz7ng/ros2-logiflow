@@ -189,8 +189,7 @@ deactivate                        # 종료
 
 ---
 
-## 미완료 / 다음 작업
-
-- **myCobot 제어 + Orin↔Pi 통신**
-  - Pi: ROS2 **Galactic** (Ubuntu 20.04) / Orin: **Humble** → 버전 차이로 직접 토픽 통신 불확실
-  - 검토 방향: DDS 통일 후 통신 테스트, 또는 소켓/MQTT 등 우회
+## CycloneDDS로 Orin, Pi, AGV 통신
+echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> ~/.bashrc
+echo 'export ROS_DOMAIN_ID=35' >> ~/.bashrc
+source ~/.bashrc
