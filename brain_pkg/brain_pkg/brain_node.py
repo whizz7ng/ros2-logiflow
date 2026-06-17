@@ -62,18 +62,18 @@ from std_msgs.msg import String, Float32MultiArray, Empty
 
 # 포장구역별 로봇팔 플레이싱 좌표
 # 실제 실측값으로 교체 필요
-PLACE_COORDS = {
-    'OR1': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
-    'OR2': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
-    'OR3': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
+ZONE_TO_PLACE = {
+    'A': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
+    'B': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
+    'C': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
 }
 
 # 목적지 → 색깔 기본 매핑 (order에 color 없을 때)
-DEST_TO_COLOR = {
-    'OR1': 'blue',
-    'OR2': 'red',
-    'OR3': 'green',
-}
+# DEST_TO_COLOR = {
+#     'A': 'blue',
+#     'B': 'red',
+#     'C': 'green',
+# }
 
 
 class BrainNode(Node):
@@ -133,22 +133,22 @@ class BrainNode(Node):
         msg.data = data
         publisher.publish(msg)
 
-    def _parse_order(self, order: str):
+    def _parse_order(self, order):
         """
-        주문 문자열 파싱.
-        포맷: "OR1:blue" → (OR1, blue)
-        단순: "OR1"      → (OR1, DEST_TO_COLOR 기본값)
+        주문 형식: "물품:구역"  예) "red_triangle:A"
+        item = 집을 물품 (YOLO 라벨)
+        zone = 배송 구역 (A/B/C)
         """
         order = order.strip()
         if ':' in order:
-            dest, color = order.split(':', 1)
-            dest = dest.upper().strip()
-            color = color.lower().strip()
+            item, zone = order.split(':', 1)
+            item = item.strip()
+            zone = zone.upper().strip()
         else:
-            dest = order.upper().strip()
-            color = DEST_TO_COLOR.get(dest, 'green')  # 기본값
-
-        return dest, color
+            # 구역 없으면 기본 A (디버깅용)
+            item = order.strip()
+            zone = 'A'
+        return item, zone
 
     def _start_next_order(self):
         if self.emergency_active:
