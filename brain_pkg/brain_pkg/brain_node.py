@@ -10,6 +10,8 @@ brain_node.py
 
 [WMS -> Brain]
 /order_request : std_msgs/String
+    포맷: "OR1:blue", "OR2:red", "OR3:green"
+    또는 단순: "OR1" (color 없으면 기본값 green)
 
 [Brain -> WMS]
 /wms_update : std_msgs/String
@@ -19,7 +21,7 @@ brain_node.py
 
 [Brain -> Vision]
 /vision_activate : std_msgs/String
-    "start", "stop"
+    "blue", "red", "green", "stop"
 
 [Vision -> Brain]
 /box_pose : std_msgs/Float32MultiArray
@@ -44,7 +46,7 @@ brain_node.py
 
 [AGV/Nav -> Brain]
 /nav_status : std_msgs/String
-    "arrived_objects", "arrived_qr", "parked"
+    "arrived_objects", "arrived_qr", "arrived_qr_red", "arrived_qr_blue", "arrived_qr_green", "parked"
 
 [Keyboard -> Brain/Pick/Nav]
 /emergency_stop : std_msgs/String
@@ -64,6 +66,13 @@ PLACE_COORDS = {
     'OR1': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
     'OR2': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
     'OR3': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
+}
+
+# 목적지 → 색깔 기본 매핑 (order에 color 없을 때)
+DEST_TO_COLOR = {
+    'OR1': 'blue',
+    'OR2': 'red',
+    'OR3': 'green',
 }
 
 
@@ -103,6 +112,7 @@ class BrainNode(Node):
         self.order_queue = deque()
         self.current_order = None
         self.destination = None
+        self.target_color = None  # 집어야 할 블록 색깔
 
         self.emergency_active = False
 
@@ -123,28 +133,24 @@ class BrainNode(Node):
         msg.data = data
         publisher.publish(msg)
 
-    def _parse_destination(self, order: str) -> str:
+    def _parse_order(self, order: str):
         """
-        주문 문자열에서 OR1/OR2/OR3 목적지 결정.
-        현재는 단순 문자열 포함 방식.
+        주문 문자열 파싱.
+        포맷: "OR1:blue" → (OR1, blue)
+        단순: "OR1"      → (OR1, DEST_TO_COLOR 기본값)
         """
-        order_upper = order.upper()
+        order = order.strip()
+        if ':' in order:
+            dest, color = order.split(':', 1)
+            dest = dest.upper().strip()
+            color = color.lower().strip()
+        else:
+            dest = order.upper().strip()
+            color = DEST_TO_COLOR.get(dest, 'green')  # 기본값
 
-        if 'OR1' in order_upper or 'A' in order_upper:
-            return 'OR1'
-        elif 'OR2' in order_upper or 'B' in order_upper:
-            return 'OR2'
-        elif 'OR3' in order_upper or 'C' in order_upper:
-            return 'OR3'
-
-        return 'OR1'
+        return dest, color
 
     def _start_next_order(self):
-        """
-        주문 큐에서 다음 주문 시작.
-        /place_target에는 OR1/OR2/OR3만 발행.
-        rack, stop은 보내지 않음.
-        """
         if self.emergency_active:
             self.get_logger().warn('비상정지 상태이므로 다음 주문 시작 안 함')
             return
@@ -154,26 +160,19 @@ class BrainNode(Node):
             return
 
         self.current_order = self.order_queue.popleft()
-        self.destination = self._parse_destination(self.current_order)
+        self.destination, self.target_color = self._parse_order(self.current_order)
 
         self.get_logger().info(
-            f'다음 주문 시작: {self.current_order}, destination={self.destination}'
+            f'다음 주문 시작: {self.current_order}, destination={self.destination}, color={self.target_color}'
         )
 
         self.state = 'NAV_TO_RACK'
         self._pub_state()
 
-        # AGV는 OR 목적지를 기억하고 먼저 물건 위치로 이동한 뒤
-        # /nav_status = arrived_objects 를 발행하는 구조
         self._publish_string(self._place_target_pub, self.destination)
         self.get_logger().info(f'/place_target 발행: {self.destination}')
 
     def _finish_current_order(self):
-        """
-        현재 주문 완료 처리.
-        남은 주문이 있으면 다음 주문 시작.
-        없으면 /go_parking Empty 발행.
-        """
         self.get_logger().info(f'현재 주문 완료: {self.current_order}')
 
         w_msg = String()
@@ -183,6 +182,7 @@ class BrainNode(Node):
 
         self.current_order = None
         self.destination = None
+        self.target_color = None
 
         if self.order_queue:
             self.get_logger().info(
@@ -296,10 +296,11 @@ class BrainNode(Node):
             self.state = 'VISION'
             self._pub_state()
 
-            self._publish_string(self._vision_activate_pub, 'start')
-            self.get_logger().info('/vision_activate 발행: start')
+            # 색깔 정보와 함께 vision 활성화
+            color = self.target_color or 'green'
+            self._publish_string(self._vision_activate_pub, color)
+            self.get_logger().info(f'/vision_activate 발행: {color}')
 
-        #elif msg.data == 'arrived_qr': 
         elif msg.data.startswith('arrived_qr'):
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
@@ -309,24 +310,21 @@ class BrainNode(Node):
 
             self.state = 'PLACING'
             self._pub_state()
-            
-            #test
+
             dest = self.destination if self.destination else 'OR3'
-            
-            
-	    if dest not in PLACE_COORDS:
-            #if self.destination not in PLACE_COORDS:
-                self.get_logger().error(f'PLACE_COORDS에 없는 목적지: {self.destination}')
+
+            if dest not in PLACE_COORDS:
+                self.get_logger().error(f'PLACE_COORDS에 없는 목적지: {dest}')
                 self.state = 'ERROR'
                 self._pub_state()
                 return
 
             place_msg = Float32MultiArray()
-            place_msg.data = PLACE_COORDS[self.destination]
+            place_msg.data = PLACE_COORDS[dest]
             self._place_command_pub.publish(place_msg)
 
             self.get_logger().info(
-                f'/place_command 발행: {self.destination}, {PLACE_COORDS[self.destination]}'
+                f'/place_command 발행: {dest}, {PLACE_COORDS[dest]}'
             )
 
         elif msg.data == 'parked':
@@ -341,6 +339,7 @@ class BrainNode(Node):
             self.state = 'IDLE'
             self.current_order = None
             self.destination = None
+            self.target_color = None
             self._pub_state()
 
             if self.order_queue:
@@ -374,8 +373,6 @@ class BrainNode(Node):
         self.state = 'EMERGENCY_STOP'
         self._pub_state()
 
-        # /place_target에 stop은 보내지 않음.
-        # 실제 모터 정지는 pick_node/nav_node가 /emergency_stop을 직접 구독해서 처리.
         self._publish_string(self._vision_activate_pub, 'stop')
 
         self.get_logger().error(
@@ -389,9 +386,9 @@ class BrainNode(Node):
 
         self.emergency_active = False
 
-        # 안전상 진행 중이던 주문은 자동 재개하지 않음
         self.current_order = None
         self.destination = None
+        self.target_color = None
 
         self.state = 'IDLE'
         self._pub_state()
