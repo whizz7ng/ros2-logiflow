@@ -160,7 +160,7 @@ class BrainNode(Node):
             return
 
         self.current_order = self.order_queue.popleft()
-        self.destination, self.target_color = self._parse_order(self.current_order)
+        self.item, self.zone = self._parse_order(self.current_order)
 
         self.get_logger().info(
             f'다음 주문 시작: {self.current_order}, destination={self.destination}, color={self.target_color}'
