@@ -21,6 +21,8 @@ D435i 한 대로 두 가지 역할을 모드 전환하며 수행:
 
 from collections import deque
 
+# from ultralytics import YOLO   # YOLO 적용 시 주석 해제
+
 import numpy as np
 import pyrealsense2 as rs
 from pyzbar import pyzbar
@@ -42,7 +44,7 @@ MODE_QR = 'qr'         # QR 검증
 class VisionNode(Node):
     def __init__(self):
         super().__init__('vision_node')
-    
+      
         # 구독
         self.create_subscription(String, '/vision_activate', self._activate_callback, 10)
         self.create_subscription(String, '/brain_state', self._state_callback, 10)
@@ -58,6 +60,10 @@ class VisionNode(Node):
         # RealSense - 노드 살아있는 동안 계속 잡고 있음 (한 노드 독점이라 충돌 없음)
         self.get_logger().info('RealSense 초기화 중...')
         self.pipeline = rs.pipeline()
+      
+        # ===== YOLO 모델 (적용 시 주석 해제) =====
+        # self.model = YOLO('/home/zzz/pj3_ws/src/brain_pkg/brain_pkg/blocks.pt')
+      
         config = rs.config()
         config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
@@ -70,6 +76,21 @@ class VisionNode(Node):
 
         self.timer = self.create_timer(0.033, self._process_frame)
 
+    # def _cam_to_arm(self, cam_xyz):
+    #     """
+    #     카메라 좌표 -> 로봇팔 좌표 변환.
+    #     손-눈 캘리브레이션으로 구한 변환행렬 적용.
+    #     TODO: 실측 변환행렬로 교체
+    #     """
+    #     import numpy as np
+    #     # 예시: 단순 오프셋 (실제론 회전+이동 행렬 필요)
+    #     R = np.eye(3)              # 회전행렬 (캘리브레이션값)
+    #     t = np.array([0, 0, 0])    # 이동벡터 (캘리브레이션값)
+    #     cam = np.array(cam_xyz)
+    #     arm = R @ cam + t
+    #     return arm.tolist()
+
+  
     # ----------------------------------------------------------
     # 콜백
     # ----------------------------------------------------------
