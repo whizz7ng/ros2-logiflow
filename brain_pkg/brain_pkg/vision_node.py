@@ -42,7 +42,7 @@ MODE_QR = 'qr'         # QR 검증
 class VisionNode(Node):
     def __init__(self):
         super().__init__('vision_node')
-
+    
         # 구독
         self.create_subscription(String, '/vision_activate', self._activate_callback, 10)
         self.create_subscription(String, '/brain_state', self._state_callback, 10)
@@ -52,7 +52,7 @@ class VisionNode(Node):
         self._qr_pub = self.create_publisher(String, '/depth_qr', 10)
 
         self.mode = MODE_IDLE
-        self.target_color = None
+        self.target_item = None    # target_color → target_item
         self.recent_qr = deque(maxlen=WINDOW_SIZE)
 
         # RealSense - 노드 살아있는 동안 계속 잡고 있음 (한 노드 독점이라 충돌 없음)
@@ -74,7 +74,7 @@ class VisionNode(Node):
     # 콜백
     # ----------------------------------------------------------
     def _activate_callback(self, msg: String):
-        data = msg.data.strip().lower()
+        data = msg.data.strip()
         if data == 'stop':
             self.mode = MODE_IDLE
             self.target_color = None
@@ -126,7 +126,7 @@ class VisionNode(Node):
     # 블록 검출 (TODO: 실제 YOLO/색검출 채우기)
     # ----------------------------------------------------------
     def _detect_block(self, img, depth_frame):
-        # TODO: target_color에 맞는 블록 찾아서 3D 좌표 계산
+         # TODO: self.target_item 라벨에 맞는 블록을 YOLO로 찾아서 3D 좌표 계산
         # 지금은 디버깅용 고정 더미 좌표
         coords = [200.0, 150.0, 80.0, 175.35, -1.1, -89.73]
 
