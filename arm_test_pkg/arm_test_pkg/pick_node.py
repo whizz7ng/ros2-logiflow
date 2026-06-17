@@ -308,50 +308,68 @@ class PickNode(Node):
     # =========================
     def _pick_sequence(self, coords):
         """
-        피킹 시퀀스
+        피킹 시퀀스 (정면 x축 접근 + 후퇴 시 살짝 들기)
 
         순서:
         1. 그리퍼 열기
-        2. 목표 물체 좌표로 이동
-        3. 그리퍼 닫기
-        4. 홈포지션 복귀
-        5. /pick_status="done" 발행
+        2. 블록 앞 정렬 (x 뒤로 뺀 상태로 y,z 맞춤)
+        3. x축 정면 전진
+        4. 그리퍼 닫기
+        5. z축 살짝 들어올림
+        6. x축 후퇴 (든 상태로 빠져나오기)
+        7. 홈포지션 복귀
+        8. /pick_status="done" 발행
         """
         try:
             if self.emergency_active:
                 return
 
-            self._log("[PICK 1/5] 그리퍼 열기")
+            x, y, z, rx, ry, rz = coords
+
+            APPROACH_X = 60.0   # 블록 앞 안전거리 (mm)
+            LIFT_Z = 15.0       # 빼낼 때 살짝 드는 높이 (mm)
+
+            approach = [x - APPROACH_X, y, z, rx, ry, rz]           # 블록 앞
+            target   = [x, y, z, rx, ry, rz]                       # 블록
+            lifted   = [x, y, z + LIFT_Z, rx, ry, rz]              # 살짝 든 것
+            retreat  = [x - APPROACH_X, y, z + LIFT_Z, rx, ry, rz]  # 든 상태로 후퇴
+
+            self._log("[PICK 1/8] 그리퍼 열기")
             self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
             if not self._safe_sleep(1.5):
                 return
                
-            self._log("[PICK 2/5] 목표 위치로 이동")
-            self.mc.send_coords(coords, MOVE_SPEED, 1)
-            if not self._safe_sleep(6.0):
+            self._log("[PICK 2/8] 블록 앞 정렬 (y,z 맞춤)")
+            self.mc.send_coords(approach, MOVE_SPEED, 1)
+            if not self._safe_sleep(5.0):
                 return
 
-            self._log("[PICK 3/5] 그리퍼 닫기")
+            self._log("[PICK 3/8] x축 정면 전진")
+            self.mc.send_coords(target, MOVE_SPEED, 1)
+            if not self._safe_sleep(4.0):
+                return
+
+            self._log("[PICK 4/8] 그리퍼 닫기")
             self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
             if not self._safe_sleep(2.5):
                 return
 
-            self._log("[PICK 5/7] z축 살짝 들어올림")
+            self._log("[PICK 5/8] z축 살짝 들어올림")
             self.mc.send_coords(lifted, MOVE_SPEED, 1)
             if not self._safe_sleep(2.0):
                 return
    
-            self._log("[PICK 6/7] x축 후퇴 (든 상태로 빠져나오기)")
+            self._log("[PICK 6/8] x축 후퇴 (든 상태로 빠져나오기)")
             self.mc.send_coords(retreat, MOVE_SPEED, 1)
             if not self._safe_sleep(4.0):
                 return
            
-            self._log("[PICK 4/5] 홈포지션 복귀")
+            self._log("[PICK 7/8] 홈포지션 복귀")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             if not self._safe_sleep(4.0):
                 return
 
-            self._log("[PICK 5/5] 픽 완료")
+            self._log("[PICK 8/8] 픽 완료")
             self._pub_pick_status("done")
 
         except Exception as e:
