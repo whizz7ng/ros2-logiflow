@@ -19,13 +19,15 @@ class VisionNode(Node):
         self.get_logger().info('vision_node 시작 - /vision_activate 대기중')
 
     def _activate_callback(self, msg):
-        if msg.data == 'start':
-            self.active = True
-            self.get_logger().info('vision_node 활성화')
-            self._detect_block()
-        elif msg.data == 'stop':
+        if msg.data == 'stop':
             self.active = False
             self.get_logger().info('vision_node 비활성화')
+        else:
+            # blue / red / green 등 색깔이 들어옴
+            self.target_color = msg.data
+            self.active = True
+            self.get_logger().info(f'vision_node 활성화 - 타겟 색깔: {msg.data}')
+            self._detect_block()
 
     def _detect_block(self):
         # TODO: 실제 D435i + 변환행렬 + YOLO 코드로 교체
