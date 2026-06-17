@@ -46,7 +46,7 @@ brain_node.py
 
 [AGV/Nav -> Brain]
 /nav_status : std_msgs/String
-    "arrived_objects", "arrived_qr", "arrived_qr_red", "arrived_qr_blue", "arrived_qr_green", "parked"
+    "arrived_objects","arrived", "parked"
 
 [Keyboard -> Brain/Pick/Nav]
 /emergency_stop : std_msgs/String
@@ -111,8 +111,8 @@ class BrainNode(Node):
 
         self.order_queue = deque()
         self.current_order = None
-        self.destination = None
-        self.target_color = None  # 집어야 할 블록 색깔
+        self.zone = None
+        self.item = None  # 집어야 할 블록 색깔
 
         self.emergency_active = False
 
@@ -176,8 +176,8 @@ class BrainNode(Node):
         self.get_logger().info(f'/wms_update 발행: {w_msg.data}')
 
         self.current_order = None
-        self.destination = None
-        self.target_color = None
+        self.zone = None
+        self.item = None
 
         if self.order_queue:
             self.get_logger().info(
@@ -281,7 +281,7 @@ class BrainNode(Node):
 
         self.get_logger().info(f'/nav_status 수신: {msg.data}')
 
-        if msg.data == 'arrived_objects':
+       if msg.data == 'arrived_objects':
             if self.state != 'NAV_TO_RACK':
                 self.get_logger().warn(
                     f'arrived_objects 수신했지만 현재 상태가 NAV_TO_RACK이 아님: {self.state}'
@@ -291,36 +291,33 @@ class BrainNode(Node):
             self.state = 'VISION'
             self._pub_state()
 
-            # 색깔 정보와 함께 vision 활성화
-            color = self.target_color or 'green'
-            self._publish_string(self._vision_activate_pub, color)
-            self.get_logger().info(f'/vision_activate 발행: {color}')
+            # 물품 라벨과 함께 vision 활성화
+            self._publish_string(self._vision_activate_pub, self.item)
+            self.get_logger().info(f'/vision_activate 발행: {self.item}')
 
         elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
-                    f'arrived_qr 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
+                    f'arrived 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
                 )
                 return
 
             self.state = 'PLACING'
             self._pub_state()
 
-            dest = self.destination if self.destination else 'OR3'
+            zone = self.zone if self.zone else 'A'
 
-            if dest not in ZONE_TO_PLACE:
-                self.get_logger().error(f'PLACE_COORDS에 없는 목적지: {self.zone}')
+            if zone not in ZONE_TO_PLACE:
+                self.get_logger().error(f'ZONE_TO_PLACE에 없는 구역: {zone}')
                 self.state = 'ERROR'
                 self._pub_state()
                 return
 
             place_msg = Float32MultiArray()
-            place_msg.data = PLACE_COORDS[dest]
+            place_msg.data = ZONE_TO_PLACE[zone]
             self._place_command_pub.publish(place_msg)
 
-            self.get_logger().info(
-                f'/place_command 발행: {dest}, {PLACE_COORDS[dest]}'
-            )
+            self.get_logger().info(f'/place_command 발행: zone={zone}')
 
         elif msg.data == 'parked':
             if self.state != 'GO_PARKING':
@@ -333,8 +330,8 @@ class BrainNode(Node):
 
             self.state = 'IDLE'
             self.current_order = None
-            self.destination = None
-            self.target_color = None
+            self.zone = None
+            self.item = None
             self._pub_state()
 
             if self.order_queue:
@@ -382,8 +379,8 @@ class BrainNode(Node):
         self.emergency_active = False
 
         self.current_order = None
-        self.destination = None
-        self.target_color = None
+        self.zone = None
+        self.item = None
 
         self.state = 'IDLE'
         self._pub_state()
