@@ -154,23 +154,18 @@ class BrainNode(Node):
         if self.emergency_active:
             self.get_logger().warn('비상정지 상태이므로 다음 주문 시작 안 함')
             return
-
         if not self.order_queue:
             self.get_logger().info('대기 주문 없음')
             return
-
         self.current_order = self.order_queue.popleft()
         self.item, self.zone = self._parse_order(self.current_order)
-
         self.get_logger().info(
-            f'다음 주문 시작: {self.current_order}, destination={self.destination}, color={self.target_color}'
+            f'다음 주문 시작: {self.current_order}, item={self.item}, zone={self.zone}'
         )
-
         self.state = 'NAV_TO_RACK'
         self._pub_state()
-
-        self._publish_string(self._place_target_pub, self.item)
-        self.get_logger().info(f'/place_target 발행: {self.item}')
+        self._publish_string(self._place_target_pub, self.zone)
+        self.get_logger().info(f'/place_target 발행: {self.zone}')
 
     def _finish_current_order(self):
         self.get_logger().info(f'현재 주문 완료: {self.current_order}')
