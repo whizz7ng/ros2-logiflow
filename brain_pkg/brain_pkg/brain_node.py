@@ -169,8 +169,8 @@ class BrainNode(Node):
         self.state = 'NAV_TO_RACK'
         self._pub_state()
 
-        self._publish_string(self._place_target_pub, self.destination)
-        self.get_logger().info(f'/place_target 발행: {self.destination}')
+        self._publish_string(self._place_target_pub, self.item)
+        self.get_logger().info(f'/place_target 발행: {self.item}')
 
     def _finish_current_order(self):
         self.get_logger().info(f'현재 주문 완료: {self.current_order}')
@@ -313,8 +313,8 @@ class BrainNode(Node):
 
             dest = self.destination if self.destination else 'OR3'
 
-            if dest not in PLACE_COORDS:
-                self.get_logger().error(f'PLACE_COORDS에 없는 목적지: {dest}')
+            if dest not in ZONE_TO_PLACE:
+                self.get_logger().error(f'PLACE_COORDS에 없는 목적지: {self.zone}')
                 self.state = 'ERROR'
                 self._pub_state()
                 return
