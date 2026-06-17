@@ -279,7 +279,7 @@ class BrainNode(Node):
             )
             return
 
-        self.get_logger().info(f'/nav_status 수신: {msg.data}')
+       self.get_logger().info(f'/nav_status 수신: {msg.data}')
 
        if msg.data == 'arrived_objects':
             if self.state != 'NAV_TO_RACK':
