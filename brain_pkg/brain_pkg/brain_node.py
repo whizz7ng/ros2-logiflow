@@ -343,13 +343,13 @@ class BrainNode(Node):
     def _emergency_stop_callback(self, msg: String):
         command = msg.data.strip().lower()
         self.get_logger().warn(f'/emergency_stop 수신: {command}')
-
+    
         if command in ['stop', 'emergency', 'emergency_stop', 'true', '1', 'on']:
             self._enter_emergency_stop()
-
+    
         elif command in ['reset', 'release', 'clear', 'false', '0', 'off']:
             self._release_emergency_stop()
-
+    
         else:
             self.get_logger().warn(f'알 수 없는 emergency_stop 명령: {msg.data}')
 
