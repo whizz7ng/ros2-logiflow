@@ -301,7 +301,7 @@ class BrainNode(Node):
             self._publish_string(self._vision_activate_pub, color)
             self.get_logger().info(f'/vision_activate 발행: {color}')
 
-        elif msg.data.startswith('arrived_qr'):
+        elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
                     f'arrived_qr 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
