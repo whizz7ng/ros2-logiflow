@@ -325,7 +325,7 @@ class PickNode(Node):
             self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
             if not self._safe_sleep(1.5):
                 return
-
+               
             self._log("[PICK 2/5] 목표 위치로 이동")
             self.mc.send_coords(coords, MOVE_SPEED, 1)
             if not self._safe_sleep(6.0):
@@ -336,6 +336,16 @@ class PickNode(Node):
             if not self._safe_sleep(2.5):
                 return
 
+            self._log("[PICK 5/7] z축 살짝 들어올림")
+            self.mc.send_coords(lifted, MOVE_SPEED, 1)
+            if not self._safe_sleep(2.0):
+                return
+   
+            self._log("[PICK 6/7] x축 후퇴 (든 상태로 빠져나오기)")
+            self.mc.send_coords(retreat, MOVE_SPEED, 1)
+            if not self._safe_sleep(4.0):
+                return
+           
             self._log("[PICK 4/5] 홈포지션 복귀")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             if not self._safe_sleep(4.0):
