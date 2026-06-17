@@ -137,6 +137,48 @@ class VisionNode(Node):
 
         # 한 번 발행하면 블록 모드 종료 (중복 발행 방지)
         self.mode = MODE_IDLE
+    
+    # YOLO 사용할경우 TODO
+    # def _detect_block(self, img, depth_frame):
+    #     # 1. YOLO로 블록들 검출
+    #     results = self.model(img)
+    
+    #     # 2. 주문한 물품(self.target_item) 라벨이랑 일치하는 것 찾기
+    #     target_box = None
+    #     for box in results[0].boxes:
+    #         label = self.model.names[int(box.cls)]
+    #         if label == self.target_item:
+    #             target_box = box
+    #             break
+    
+    #     # 3. 못 찾으면 종료 (다음 프레임에 재시도)
+    #     if target_box is None:
+    #         self.get_logger().warn(f'{self.target_item} 못 찾음, 재시도')
+    #         return  # mode 안 바꿈 → 다음 프레임에 다시 시도
+    
+    #     # 4. 박스 중심 픽셀 좌표
+    #     x1, y1, x2, y2 = target_box.xyxy[0]
+    #     cx = int((x1 + x2) / 2)
+    #     cy = int((y1 + y2) / 2)
+    
+    #     # 5. 그 픽셀의 depth(거리) 읽기
+    #     dist = depth_frame.get_distance(cx, cy)
+    
+    #     # 6. 픽셀+거리 → 카메라 3D 좌표
+    #     intr = depth_frame.profile.as_video_stream_profile().intrinsics
+    #     cam_xyz = rs.rs2_deproject_pixel_to_point(intr, [cx, cy], dist)
+    
+    #     # 7. 카메라 좌표 → 로봇팔 좌표 (변환행렬)
+    #     arm_xyz = self._cam_to_arm(cam_xyz)
+    
+    #     # 8. 좌표 + 자세 합쳐서 발행
+    #     coords = arm_xyz + [175.35, -1.1, -89.73]  # 자세는 고정
+    #     msg = Float32MultiArray()
+    #     msg.data = [float(v) for v in coords]
+    #     self._box_pose_pub.publish(msg)
+    #     self.get_logger().info(f'{self.target_item} 발견, /box_pose 발행: {coords}')
+    
+    #     self.mode = MODE_IDLE
 
     # ----------------------------------------------------------
     # QR 검증
