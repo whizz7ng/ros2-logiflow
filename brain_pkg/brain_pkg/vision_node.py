@@ -17,7 +17,7 @@ D435i 한 대로 두 가지 역할을 모드 전환하며 수행:
 [발행]
   /box_pose        : std_msgs/Float32MultiArray   [x,y,z,rx,ry,rz]
   /depth_qr        : std_msgs/String             "A:0.90"
-  /raw_image       : sensor_msgs/CompressedImage  D435i RGB 원본 영상 jpeg (대시보드용)
+  /camera/image_compressed : sensor_msgs/CompressedImage  D435i RGB 원본 영상 jpeg (대시보드용)
   /detected_image  : sensor_msgs/CompressedImage  YOLO 검출 결과 영상 jpeg (미구현 시 raw와 동일)
 """
 
@@ -55,7 +55,7 @@ class VisionNode(Node):
         # 발행
         self._box_pose_pub       = self.create_publisher(Float32MultiArray, '/box_pose',       10)
         self._qr_pub             = self.create_publisher(String,            '/depth_qr',       10)
-        self._raw_image_pub      = self.create_publisher(CompressedImage,   '/raw_image',      10)
+        self._raw_image_pub      = self.create_publisher(CompressedImage,   '/camera/image_compressed',      10)
         self._detected_image_pub = self.create_publisher(CompressedImage,   '/detected_image', 10)
 
         self.mode        = MODE_IDLE
@@ -122,7 +122,7 @@ class VisionNode(Node):
 
         img = np.asanyarray(color_frame.get_data())
 
-        # /raw_image 항상 발행 (모드 무관)
+        # /camera/image_compressed 항상 발행 (모드 무관)
         self._publish_compressed(self._raw_image_pub, img)
 
         if self.mode == MODE_IDLE:
