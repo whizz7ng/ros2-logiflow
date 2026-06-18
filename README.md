@@ -193,3 +193,29 @@ deactivate                        # 종료
 echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> ~/.bashrc
 echo 'export ROS_DOMAIN_ID=35' >> ~/.bashrc
 source ~/.bashrc
+
+
+
+
+
+## ROS2 Topic Interface
+
+| 토픽명 (Topic Name)   | 발신 (Publisher)        | 수신 (Subscriber)                         | 메시지 타입                       | 내용 / 비고                                                                                                         |
+| ------------------ | --------------------- | --------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `/order_request`   | `wms_node`            | `brain_node`                            | `std_msgs/String`            | 주문 정보 전달. `"물품라벨:구역"` 형식으로 사용. 예: `"red_triangle:A"`<br>물품 라벨과 배송구역은 콜론(`:`)으로 구분되며, 서로 독립적으로 처리된다.             |
+| `/vision_activate` | `brain_node`          | `vision_node`                           | `std_msgs/String`            | 비전 인식 활성화/중지 명령.<br>물품 라벨 수신 시 해당 물품 검출 시작, `"stop"` 수신 시 검출 중지.                                                |
+| `/box_pose`        | `vision_node`         | `brain_node`                            | `std_msgs/Float32MultiArray` | 인식된 블록의 3D 목표 좌표 전달.<br>형식: `[x, y, z, rx, ry, rz]`                                                             |
+| `/pick_command`    | `brain_node`          | `pick_node` (Pi)                        | `std_msgs/Float32MultiArray` | 피킹 명령 및 물체 목표 좌표 전달.<br>형식: `[x, y, z, rx, ry, rz]`                                                             |
+| `/place_command`   | `brain_node`          | `pick_node` (Pi)                        | `std_msgs/Float32MultiArray` | 플레이싱 명령 및 포장구역 내려놓기 좌표 전달.<br>형식: `[x, y, z, rx, ry, rz]`                                                       |
+| `/pick_status`     | `pick_node` (Pi)      | `brain_node`                            | `std_msgs/String`            | 피킹/플레이싱 결과 신호.<br>사용 값: `"done"`, `"placing_done"`, `"error"`                                                   |
+| `/place_target`    | `brain_node`          | `nav_node`                              | `std_msgs/String`            | 포장 목적지 지정.<br>사용 값: `"A"`, `"B"`, `"C"`<br>`nav_node`가 물체 위치 및 포장구역 이동 흐름을 관리한다.                                |
+| `/arm_status`      | `brain_node`          | `nav_node`                              | `std_msgs/String`            | 로봇팔 작업 상태 알림.<br>사용 값: `"picked"`, `"placed"`<br>AGV 회전 또는 다음 이동 트리거에 사용된다.                                     |
+| `/go_parking`      | `brain_node`          | `nav_node`                              | `std_msgs/Empty`             | 모든 주문 완료 후 주차 위치로 복귀 명령.                                                                                        |
+| `/nav_status`      | `nav_node`            | `brain_node`                            | `std_msgs/String`            | AGV 이동 상태 피드백.<br>사용 값: `"arrived_objects"`, `"arrived"`, `"parked"`                                            |
+| `/qr_result`       | `qr_node`             | `nav_node`                              | `std_msgs/String`            | AGV 내부 QR 인식 결과 및 정밀 정차 신호.<br>AGV가 구역 판단과 재시도를 자체 처리한다.                                                        |
+| `/depth_qr`        | `vision_node`         | 측정·로그용                                  | `std_msgs/String`            | D435i 뎁스 기반 구역 QR 검증 결과.<br>형식: `"A:0.90"` = `구역:검출성공률`<br>FSM 흐름에는 관여하지 않는 백업/측정용이며, `NAV_TO_DEST` 상태에서만 동작한다. |
+| `/emergency_stop`  | `keyboard_estop_node` | `brain_node` / `pick_node` / `nav_node` | `std_msgs/String`            | 비상정지 및 해제 명령.<br>사용 값: `"stop"`, `"reset"`                                                                      |
+| `/wms_update`      | `brain_node`          | `wms_node`                              | `std_msgs/String`            | 재고 차감 및 주문 완료 처리 요청.                                                                                            |
+| `/brain_state`     | `brain_node`          | `dashboard_node`                        | `std_msgs/String`            | FSM 현재 상태를 대시보드로 전달.                                                                                            |
+
+
