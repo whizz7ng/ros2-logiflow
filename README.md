@@ -198,27 +198,70 @@ source ~/.bashrc
 
 
 
-### 카메라 토픽 (realsense2_camera 드라이버 공유)
+## ROS2 Topic Interface
 
-D435i 한 대를 realsense2_camera 드라이버가 열고, vision_node·대시보드·라인트레이싱이 토픽을 구독해 공유한다.
+### 메인 흐름 (주문 → 픽업 → 배송)
 
-| 토픽명 | 발신 | 수신 | 타입 | 비고 |
+| 토픽명 | 발신 | 수신 | 타입 | 내용 / 비고 |
 | --- | --- | --- | --- | --- |
-| `/camera/camera/color/image_raw` | `realsense2_camera` | `vision_node` | `sensor_msgs/Image` | 컬러 원본 (YOLO 추론용) |
-| `/camera/camera/color/image_raw/compressed` | `realsense2_camera` | `wms_dashboard_node` | `sensor_msgs/CompressedImage` | 대시보드용 압축 영상 |
+| `/order_request` | `wms_dashboard_node` | `brain_node` | `std_msgs/String` | 주문 정보. `"물품라벨:구역"` 형식. 예: `"red_cross:A"` |
+| `/vision_activate` | `brain_node` | `vision_node` | `std_msgs/String` | 비전 인식 활성화/중지. 물품라벨 수신 시 검출 시작, `"stop"` 시 중지 |
+| `/box_pose` | `vision_node` | `brain_node` | `std_msgs/Float32MultiArray` | 인식된 블록의 3D 목표 좌표. `[x, y, z, rx, ry, rz]` |
+| `/pick_command` | `brain_node` | `pick_node` (Pi) | `std_msgs/Float32MultiArray` | 피킹 명령 및 목표 좌표. `[x, y, z, rx, ry, rz]` |
+| `/place_command` | `brain_node` | `pick_node` (Pi) | `std_msgs/Float32MultiArray` | 플레이싱 명령 및 내려놓기 좌표. `[x, y, z, rx, ry, rz]` |
+| `/pick_status` | `pick_node` (Pi) | `brain_node` | `std_msgs/String` | 피킹/플레이싱 결과. 값: `"done"`, `"placing_done"`, `"error"` |
+| `/place_target` | `brain_node` | `nav_node` | `std_msgs/String` | 포장 목적지. 값: `"A"`, `"B"`, `"C"` |
+| `/arm_status` | `brain_node` | `nav_node` | `std_msgs/String` | 로봇팔 작업 상태. 값: `"picked"`, `"placed"`. AGV 이동 트리거 |
+| `/go_parking` | `brain_node` | `nav_node` | `std_msgs/Empty` | 모든 주문 완료 후 주차 복귀 명령 |
+| `/nav_status` | `nav_node` | `brain_node` | `std_msgs/String` | AGV 이동 상태. 값: `"arrived_objects"`, `"arrived"`, `"parked"` |
+| `/wms_update` | `brain_node` | `wms_dashboard_node` | `std_msgs/String` | 주문 완료/실패 알림. `"물품라벨:구역:상태"` 예: `"red_cross:A:done"`. 상태값: `"done"`, `"error"` |
+
+### 보조 / 검증
+
+| 토픽명 | 발신 | 수신 | 타입 | 내용 / 비고 |
+| --- | --- | --- | --- | --- |
+| `/qr_result` | `qr_node` | `nav_node` | `std_msgs/String` | AGV 내부 QR 인식 및 정밀 정차 신호. AGV가 구역 판단/재시도 자체 처리 |
+| `/depth_qr` | `vision_node` | 측정·로그용 | `std_msgs/String` | D435i 뎁스 기반 구역 QR 검증. `"A:0.90"` = `구역:성공률`. FSM 미관여, `NAV_TO_DEST`에서만 동작 |
+| `/emergency_stop` | `keyboard_estop_node` / `wms_dashboard_node` | `brain_node` / `pick_node` / `nav_node` | `std_msgs/String` | 비상정지/해제. 값: `"stop"`, `"reset"` |
+
+### 카메라 (realsense2_camera 드라이버 공유)
+
+D435i 한 대를 드라이버가 열고, vision_node·대시보드·라인트레이싱이 토픽을 구독해 공유.
+
+| 토픽명 | 발신 | 수신 | 타입 | 내용 / 비고 |
+| --- | --- | --- | --- | --- |
+| `/camera/camera/color/image_raw` | `realsense2_camera` | `vision_node`, `line_tracer` | `sensor_msgs/Image` | 컬러 원본 (YOLO 추론, 라인트레이싱) |
+| `/camera/camera/color/image_raw/compressed` | `realsense2_camera` | `wms_dashboard_node` | `sensor_msgs/CompressedImage` | 대시보드용 압축 영상. format=`"rgb8; jpeg compressed bgr8"` |
 | `/camera/camera/aligned_depth_to_color/image_raw` | `realsense2_camera` | `vision_node` | `sensor_msgs/Image` | 정렬 depth (3D 좌표 계산용) |
 | `/camera/camera/color/camera_info` | `realsense2_camera` | `vision_node` | `sensor_msgs/CameraInfo` | intrinsic (deproject용) |
-| `/detected_image` | `vision_node` | `wms_dashboard_node` | `sensor_msgs/CompressedImage` | YOLO 검출 결과 영상(박스 표시). format=`"jpeg"`. 블록 검출 시점 발행 |
+| `/detected_image` | `vision_node` | `wms_dashboard_node` | `sensor_msgs/CompressedImage` | YOLO 검출 결과 영상(박스 표시). 검출 시점 발행 |
 
-**드라이버 실행 (압축 토픽 포함):**
+**드라이버 실행:**
 ```
 ros2 launch realsense2_camera rs_launch.py enable_color:=true enable_depth:=true align_depth.enable:=true rgb_camera.color_profile:=640x480x30
 ```
 
-**대시보드 카메라 수신 시 주의:**
-- 토픽: `/camera/camera/color/image_raw/compressed` (기존 `/camera/image_compressed` 아님)
-- format 문자열: `"rgb8; jpeg compressed bgr8"` (단순 `"jpeg"` 아님)
-- data는 표준 jpeg이므로 디코드는 동일. 프론트엔드에서 format을 `"jpeg"`로 엄격 비교하는 코드가 있으면 수정 필요.
-- 원본 카메라 영상은 드라이버에서 직접 구독, 검출 박스 영상은 `/detected_image`(vision_node)에서 구독.
+---
+
+### YOLO 클래스 (물품 라벨)
+
+`/order_request`, `/vision_activate`의 물품라벨은 반드시 아래 5개 중 하나:
+
+- `blue_pentagon`
+- `green_clover`
+- `green_dome`
+- `red_cross`
+- `red_square`
+
+> ⚠️ 대시보드 DB의 `yolo_label`도 위 5개로 통일 필요 (기존 `red_triangle`, `blue_square` 등은 모델에 없음)
+
+---
+
+### 변경 이력
+
+1. `/order_request` 예시 클래스명: `red_triangle` → 실제 클래스(`red_cross` 등)
+2. `/wms_update` 형식 확정: `"물품라벨:구역:상태"` 3개 필드 (brain `_finish_current_order`에서 `f"{item}:{zone}:done"` 발행)
+3. 카메라 구조 변경: vision_node 직접 발행 → realsense2_camera 드라이버 공유 (옵션 A)
+4. 노드명 정정: `wms_node` → `wms_dashboard_node`
 
 
