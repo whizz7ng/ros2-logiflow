@@ -52,7 +52,7 @@ MODE_BLOCK = 'block'
 MODE_QR    = 'qr'
 
 # ===== 설정 =====
-MODEL_PATH = '/home/zzz/best.pt'
+MODEL_PATH = '/home/zzz/pj3_ws/src/brain_pkg/brain_pkg/best.pt'
 CONF_THRES = 0.55
 
 # 카메라 토픽 (realsense2_camera 드라이버 기준)
