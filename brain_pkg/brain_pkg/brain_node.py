@@ -148,11 +148,11 @@ class BrainNode(Node):
 
     def _finish_current_order(self):
         self.get_logger().info(f'현재 주문 완료: {self.current_order}')
-
+    
         w_msg = String()
-        w_msg.data = self.current_order or 'done'
+        w_msg.data = f'{self.item}:{self.zone}:done'   # ← 3개 (label:zone:done)
         self._wms_update_pub.publish(w_msg)
-        self.get_logger().info(f'/wms_update 발행: {w_msg.data}')
+        self.get_logger().info(f'/wms_update 발행: {w_msg.data}'))
 
         self.current_order = None
         self.zone = None
