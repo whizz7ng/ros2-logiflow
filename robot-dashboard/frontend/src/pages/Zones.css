@@ -1,0 +1,83 @@
+.zones { display: flex; flex-direction: column; gap: 10px; }.zones { display: flex; flex-direction: column; gap: 12px; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; }
+.page-title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.btn-accent {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 6px 12px; border-radius: 6px;
+  background: #065F46; color: #fff; border: 0.5px solid #065F46; cursor: pointer;
+}
+
+.zone-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.zone-card {
+  background: var(--card-bg); border: 0.5px solid var(--card-border);
+  border-top: 2.5px solid; border-radius: 9px; padding: 12px 14px;
+}
+.zc-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+.zc-desc { font-size: 11px; color: var(--text-tertiary); }
+.zc-info { margin-top: 6px; font-size: 10px; color: var(--text-tertiary); font-family: monospace; }
+.zc-status { margin-top: 6px; }
+.zc-actions { display: flex; gap: 4px; margin-top: 8px; }
+
+.tbl-wrap { overflow: hidden; border-radius: 10px; border: 0.5px solid var(--card-border); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+.tbl th {
+  text-align: left; padding: 8px 10px; color: var(--text-tertiary);
+  font-weight: 500; border-bottom: 0.5px solid var(--card-border);
+  font-size: 10px; background: var(--content-bg);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tbl td {
+  padding: 8px 10px; border-bottom: 0.5px solid #F1F5F9;
+  color: var(--text-primary); vertical-align: middle; background: var(--card-bg);
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: var(--content-bg); }
+
+.desc-cell { color: var(--text-secondary); }
+.mono-cell { font-family: monospace; font-size: 10px; color: var(--text-tertiary); }
+
+.badge { display: inline-flex; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 500; }
+.b-teal { background: #ECFDF5; color: #065F46; }
+.b-amber { background: #FEF3C7; color: #92400E; }
+
+.action-btns { display: flex; gap: 4px; }
+.act-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; padding: 2px; border-radius: 4px; color: var(--text-tertiary);
+}
+.act-btn:hover { background: var(--content-bg); color: var(--text-primary); }
+
+/* 모달 — Products와 동일 스타일 */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal {
+  background: var(--card-bg); border-radius: 12px; width: 420px;
+  border: 0.5px solid var(--card-border); overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 0.5px solid var(--card-border);
+  font-size: 14px; font-weight: 500;
+}
+.modal-close { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--text-tertiary); }
+.modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.form-row { display: flex; align-items: center; gap: 10px; }
+.form-row label { width: 60px; font-size: 11px; color: var(--text-secondary); flex-shrink: 0; }
+.form-row input, .form-row select {
+  flex: 1; font-size: 12px; padding: 6px 8px; border-radius: 6px;
+  border: 0.5px solid var(--card-border); background: var(--content-bg);
+  color: var(--text-primary);
+}
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px; border-top: 0.5px solid var(--card-border);
+}
+.btn-outline {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 6px 12px; border-radius: 6px;
+  background: var(--card-bg); color: var(--text-secondary);
+  border: 0.5px solid var(--card-border); cursor: pointer;
+}

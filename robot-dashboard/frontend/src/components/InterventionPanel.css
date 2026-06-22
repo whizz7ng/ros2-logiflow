@@ -1,0 +1,22 @@
+.int-card {
+  background: var(--card-bg);
+  border: 0.5px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.int-sect { font-size: 9px; color: var(--text-tertiary); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 5px; }
+.ib {
+  padding: 9px 8px; border-radius: 6px; border: 0.5px solid var(--card-border);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+  background: var(--content-bg); color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px;
+}
+.ib:hover { color: var(--text-primary); }
+.estop {
+  padding: 9px 8px; border-radius: 6px; border: 0.5px solid #FECACA;
+  background: #FEF2F2; color: #991B1B;
+  font-size: 11px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+}
+.divider { height: 0.5px; background: #F1F5F9; margin: 8px 0; }
