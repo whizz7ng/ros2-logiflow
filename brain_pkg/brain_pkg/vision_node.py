@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-vision_node.py  (YOLO 통합 버전 - 캘리브레이션 전)
+vision_node.py  (토픽 구독 버전 - 카메라 공유용)
 
-D435i 한 대로 두 가지 역할을 모드 전환하며 수행:
-- 블록 검출 모드: brain이 /vision_activate로 타겟 클래스명을 보내면
-  YOLO로 그 블록을 찾아 카메라 3D 좌표를 계산, /box_pose로 발행
-- QR 검증 모드: brain 상태가 NAV_TO_DEST면 구역 QR(A/B/C)을 읽어 /depth_qr로 발행
+기존: pyrealsense2로 카메라 직접 열기
+변경: realsense2_camera 드라이버가 발행하는 토픽을 구독
+      → 카메라 한 대를 다른 노드(라인트레이싱 등)와 공유 가능
 
-주의:
-- 실행 전 venv 활성화 필요: source ~/yolo_env/bin/activate
-- 캘리브레이션 전이라 _cam_to_arm 미구현. 팔 좌표는 더미값 발행 중.
-  (카메라 좌표 cam_xyz는 실제 계산됨 - 로그로 검증 가능)
+전제: realsense2_camera 드라이버가 아래 옵션으로 먼저 떠 있어야 함
+  ros2 launch realsense2_camera rs_launch.py \
+    enable_color:=true enable_depth:=true \
+    align_depth.enable:=true \
+    rgb_camera.color_profile:=640x480x30
 
-토픽:
-[구독]
-  /vision_activate : std_msgs/String    클래스명("red_cross" 등) 또는 "stop"
-  /brain_state     : std_msgs/String    "NAV_TO_DEST"일 때 QR 모드
-[발행]
-  /box_pose        : std_msgs/Float32MultiArray   [x,y,z,rx,ry,rz]
-  /depth_qr        : std_msgs/String              "A:0.90"
-  /camera/image_compressed : sensor_msgs/CompressedImage  원본 영상 jpeg (대시보드용)
-  /detected_image  : sensor_msgs/CompressedImage  YOLO 검출 결과 영상 jpeg
+실행 (venv 필요):
+  source ~/yolo_env/bin/activate
+  python3 vision_node.py
+
+구독 토픽:
+  /camera/camera/color/image_raw                  (컬러, YOLO용)
+  /camera/camera/aligned_depth_to_color/image_raw (정렬 depth, 거리용)
+  /camera/camera/color/camera_info                (intrinsic, deproject용)
+  /vision_activate, /brain_state
+
+발행 토픽:
+  /box_pose, /depth_qr, /detected_image
+  (주의: /camera/image_compressed는 이제 드라이버가 color/image_raw로 발행하므로
+   대시보드는 그쪽을 쓰거나, 필요하면 여기서 재발행)
 """
 
 from collections import deque
@@ -30,13 +35,13 @@ from ultralytics import YOLO
 
 import cv2
 import numpy as np
-import pyrealsense2 as rs
 from pyzbar import pyzbar
+from cv_bridge import CvBridge
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 
 
 WINDOW_SIZE = 10
@@ -47,10 +52,14 @@ MODE_BLOCK = 'block'
 MODE_QR    = 'qr'
 
 # ===== 설정 =====
-MODEL_PATH = '/home/zzz/best.pt'   # Jetson에 scp로 넣은 모델 경로
+MODEL_PATH = '/home/zzz/best.pt'
 CONF_THRES = 0.55
 
-# 클래스별 박스 색상 (BGR)
+# 카메라 토픽 (realsense2_camera 드라이버 기준)
+TOPIC_COLOR = '/camera/camera/color/image_raw'
+TOPIC_DEPTH = '/camera/camera/aligned_depth_to_color/image_raw'
+TOPIC_CAMINFO = '/camera/camera/color/camera_info'
+
 CLASS_COLORS = {
     'blue_pentagon': (255, 100, 0),
     'green_clover':  (0, 200, 0),
@@ -64,15 +73,12 @@ class VisionNode(Node):
     def __init__(self):
         super().__init__('vision_node')
 
-        # 구독
-        self.create_subscription(String, '/vision_activate', self._activate_callback, 10)
-        self.create_subscription(String, '/brain_state',     self._state_callback,    10)
+        self.bridge = CvBridge()
 
-        # 발행
-        self._box_pose_pub       = self.create_publisher(Float32MultiArray, '/box_pose',       10)
-        self._qr_pub             = self.create_publisher(String,            '/depth_qr',       10)
-        self._raw_image_pub      = self.create_publisher(CompressedImage,   '/camera/image_compressed', 10)
-        self._detected_image_pub = self.create_publisher(CompressedImage,   '/detected_image', 10)
+        # 최신 프레임 저장
+        self.color_img = None
+        self.depth_img = None      # 정렬된 depth (16UC1, mm 단위)
+        self.intrinsics = None     # (fx, fy, cx, cy)
 
         self.mode        = MODE_IDLE
         self.target_item = None
@@ -83,31 +89,58 @@ class VisionNode(Node):
         self.model = YOLO(MODEL_PATH)
         self.get_logger().info(f'YOLO 클래스: {self.model.names}')
 
-        # RealSense 초기화
-        self.get_logger().info('RealSense 초기화 중...')
-        self.pipeline = rs.pipeline()
-        config = rs.config()
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16,  30)
-        self.profile = self.pipeline.start(config)
-        self.align = rs.align(rs.stream.color)
+        # 구독 - 카메라 토픽
+        self.create_subscription(Image, TOPIC_COLOR, self._color_callback, 10)
+        self.create_subscription(Image, TOPIC_DEPTH, self._depth_callback, 10)
+        self.create_subscription(CameraInfo, TOPIC_CAMINFO, self._caminfo_callback, 10)
 
-        self.get_logger().info('vision_node 시작 (YOLO 통합 / 블록·QR)')
+        # 구독 - brain
+        self.create_subscription(String, '/vision_activate', self._activate_callback, 10)
+        self.create_subscription(String, '/brain_state',     self._state_callback,    10)
 
+        # 발행
+        self._box_pose_pub       = self.create_publisher(Float32MultiArray, '/box_pose',       10)
+        self._qr_pub             = self.create_publisher(String,            '/depth_qr',       10)
+        self._detected_image_pub = self.create_publisher(CompressedImage,   '/detected_image', 10)
+
+        self.get_logger().info('vision_node 시작 (토픽 구독 / YOLO 통합)')
+
+        # 처리 타이머 (33ms = 약 30Hz)
         self.timer = self.create_timer(0.033, self._process_frame)
 
     # ----------------------------------------------------------
-    # 콜백
+    # 카메라 토픽 콜백 - 최신 프레임만 저장
+    # ----------------------------------------------------------
+    def _color_callback(self, msg: Image):
+        # rgb8 -> bgr (OpenCV/YOLO는 bgr 기준)
+        self.color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+    def _depth_callback(self, msg: Image):
+        # 정렬된 depth, 16UC1 (mm)
+        self.depth_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+
+    def _caminfo_callback(self, msg: CameraInfo):
+        # K = [fx 0 cx; 0 fy cy; 0 0 1]
+        if self.intrinsics is None:
+            fx, fy = msg.k[0], msg.k[4]
+            cx, cy = msg.k[2], msg.k[5]
+            self.intrinsics = (fx, fy, cx, cy)
+            self.get_logger().info(
+                f'intrinsic 수신: fx={fx:.1f} fy={fy:.1f} cx={cx:.1f} cy={cy:.1f}'
+            )
+
+    # ----------------------------------------------------------
+    # brain 콜백
     # ----------------------------------------------------------
     def _activate_callback(self, msg: String):
         data = msg.data.strip()
         if data == 'stop':
-            self.mode        = MODE_IDLE
+            self.mode = MODE_IDLE
             self.target_item = None
             self.get_logger().info('블록 검출 중지')
         else:
             self.target_item = data
-            self.mode        = MODE_BLOCK
+            self.mode = MODE_BLOCK
             self.get_logger().info(f'블록 검출 모드 - 타겟: {data}')
 
     def _state_callback(self, msg: String):
@@ -125,54 +158,27 @@ class VisionNode(Node):
     # 프레임 처리
     # ----------------------------------------------------------
     def _process_frame(self):
-        try:
-            frames = self.pipeline.wait_for_frames(timeout_ms=200)
-        except Exception:
-            return
-
-        aligned     = self.align.process(frames)
-        color_frame = aligned.get_color_frame()
-        depth_frame = aligned.get_depth_frame()
-        if not color_frame:
-            return
-
-        img = np.asanyarray(color_frame.get_data())
-
-        # /camera/image_compressed 항상 발행 (모드 무관)
-        self._publish_compressed(self._raw_image_pub, img)
+        if self.color_img is None:
+            return  # 아직 영상 안 들어옴
 
         if self.mode == MODE_IDLE:
             return
-
         if self.mode == MODE_BLOCK:
-            self._detect_block(img, depth_frame)
+            self._detect_block()
         elif self.mode == MODE_QR:
-            self._detect_qr(img)
+            self._detect_qr()
 
     # ----------------------------------------------------------
-    # CompressedImage 발행 헬퍼
+    # 블록 검출 (YOLO - 캘리브레이션 전)
     # ----------------------------------------------------------
-    def _publish_compressed(self, publisher, img):
-        try:
-            ret, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if not ret:
-                return
-            msg = CompressedImage()
-            msg.header.stamp    = self.get_clock().now().to_msg()
-            msg.header.frame_id = 'camera_color_optical_frame'
-            msg.format = 'jpeg'
-            msg.data   = buf.tobytes()
-            publisher.publish(msg)
-        except Exception as e:
-            self.get_logger().warn(f'CompressedImage 발행 실패: {e}')
+    def _detect_block(self):
+        if self.depth_img is None or self.intrinsics is None:
+            self.get_logger().warn('depth/intrinsic 아직 준비 안 됨')
+            return
 
-    # ----------------------------------------------------------
-    # 블록 검출 (YOLO - 캘리브레이션 전 임시)
-    # ----------------------------------------------------------
-    def _detect_block(self, img, depth_frame):
+        img = self.color_img.copy()
         results = self.model(img, conf=CONF_THRES, verbose=False)
 
-        # 타겟 클래스 찾기
         target_box = None
         for box in results[0].boxes:
             label = self.model.names[int(box.cls)]
@@ -181,40 +187,40 @@ class VisionNode(Node):
                 break
 
         if target_box is None:
-            self.get_logger().warn(f'{self.target_item} 못 찾음, 다음 프레임 재시도')
-            return  # mode 유지하고 재시도
+            self.get_logger().warn(f'{self.target_item} 못 찾음, 재시도')
+            return
 
         x1, y1, x2, y2 = map(int, target_box.xyxy[0])
         cx = (x1 + x2) // 2
         cy = (y1 + y2) // 2
 
-        # ===== 잘림 감지 =====
+        # 잘림 감지
         H, W = img.shape[:2]
         margin = 5
         if x1 <= margin or y1 <= margin or x2 >= W - margin or y2 >= H - margin:
-            self.get_logger().warn(
-                f'{self.target_item} 잘림 감지(경계 접촉) - 픽업 보류, 재정렬 필요'
-            )
-            # TODO: brain에 재정렬 신호 보내기
+            self.get_logger().warn(f'{self.target_item} 잘림 감지 - 픽업 보류, 재정렬 필요')
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             return
 
-        # ===== depth 읽기 (5x5 patch median) =====
-        dist = self._get_robust_depth(depth_frame, cx, cy)
-        if dist <= 0.0:
+        # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
+        dist_m = self._get_robust_depth(cx, cy)
+        if dist_m <= 0.0:
             self.get_logger().warn(f'{self.target_item} depth 측정 실패(0) - 재시도')
             return
 
-        # ===== 카메라 3D 좌표 =====
-        intr = depth_frame.profile.as_video_stream_profile().intrinsics
-        cam_xyz = rs.rs2_deproject_pixel_to_point(intr, [cx, cy], dist)
+        # 카메라 3D 좌표 (deproject) - intrinsic으로 직접 계산
+        fx, fy, ppx, ppy = self.intrinsics
+        X = (cx - ppx) / fx * dist_m
+        Y = (cy - ppy) / fy * dist_m
+        Z = dist_m
+        cam_xyz = [X, Y, Z]
 
         self.get_logger().info(
             f'{self.target_item} 발견 | 픽셀=({cx},{cy}) '
-            f'dist={dist:.3f}m cam_xyz={[round(v, 3) for v in cam_xyz]}'
+            f'dist={dist_m:.3f}m cam_xyz={[round(v, 3) for v in cam_xyz]}'
         )
 
-        # ===== 팔 좌표 변환 (캘리브레이션 전 - 더미) =====
+        # 팔 좌표 변환 (캘리브레이션 전 - 더미)
         # TODO: arm_xyz = self._cam_to_arm(cam_xyz)
         arm_xyz = [200.0, 150.0, 80.0]
         self.get_logger().warn('  -> 캘리브레이션 전: 더미 팔좌표 발행')
@@ -228,18 +234,21 @@ class VisionNode(Node):
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
 
-    def _get_robust_depth(self, depth_frame, cx, cy, k=2):
-        """중심 주변 (2k+1)x(2k+1) patch에서 0 아닌 값들의 median."""
+    def _get_robust_depth(self, cx, cy, k=2):
+        """정렬 depth 이미지에서 (2k+1)x(2k+1) patch의 0 아닌 값 median. mm -> m."""
+        H, W = self.depth_img.shape[:2]
         vals = []
         for dy in range(-k, k + 1):
             for dx in range(-k, k + 1):
-                d = depth_frame.get_distance(cx + dx, cy + dy)
-                if d > 0.0:
-                    vals.append(d)
+                px, py = cx + dx, cy + dy
+                if 0 <= px < W and 0 <= py < H:
+                    d = int(self.depth_img[py, px])  # mm
+                    if d > 0:
+                        vals.append(d)
         if not vals:
             return 0.0
         vals.sort()
-        return vals[len(vals) // 2]
+        return vals[len(vals) // 2] / 1000.0  # mm -> m
 
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
@@ -247,12 +256,22 @@ class VisionNode(Node):
         tag = f'{label} (CUT)' if cut else label
         cv2.putText(img, tag, (x1, max(y1 - 8, 12)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        self._publish_compressed(self._detected_image_pub, img)
+        try:
+            ret, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ret:
+                out = CompressedImage()
+                out.header.stamp = self.get_clock().now().to_msg()
+                out.format = 'jpeg'
+                out.data = buf.tobytes()
+                self._detected_image_pub.publish(out)
+        except Exception as e:
+            self.get_logger().warn(f'detected_image 발행 실패: {e}')
 
     # ----------------------------------------------------------
     # QR 검증
     # ----------------------------------------------------------
-    def _detect_qr(self, img):
+    def _detect_qr(self):
+        img = self.color_img
         zone = None
         decoded = pyzbar.decode(img)
         for obj in decoded:
@@ -275,13 +294,6 @@ class VisionNode(Node):
                 out.data = f'{top_zone}:{rate:.2f}'
                 self._qr_pub.publish(out)
                 self.get_logger().info(f'/depth_qr 발행: {out.data}')
-
-    def destroy_node(self):
-        try:
-            self.pipeline.stop()
-        except Exception:
-            pass
-        super().destroy_node()
 
 
 def main(args=None):
