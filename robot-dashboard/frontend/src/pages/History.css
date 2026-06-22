@@ -1,0 +1,62 @@
+.history { display: flex; flex-direction: column; gap: 12px; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; }
+.page-title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.btn-outline {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 6px 12px; border-radius: 6px;
+  background: var(--card-bg); color: var(--text-secondary);
+  border: 0.5px solid var(--card-border); cursor: pointer;
+}
+
+.tbl-wrap { overflow: hidden; border-radius: 10px; border: 0.5px solid var(--card-border); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+.tbl th {
+  text-align: left; padding: 8px 10px; color: var(--text-tertiary);
+  font-weight: 500; border-bottom: 0.5px solid var(--card-border);
+  font-size: 10px; background: var(--content-bg);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tbl td {
+  padding: 8px 10px; border-bottom: 0.5px solid #F1F5F9;
+  color: var(--text-primary); vertical-align: middle; background: var(--card-bg);
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: var(--content-bg); }
+
+.id-cell { color: var(--text-tertiary); font-size: 10px; font-family: monospace; }
+.time-cell { color: var(--text-secondary); }
+.dim-cell { color: var(--text-tertiary); font-family: monospace; }
+.stock-low { color: #DC2626; font-weight: 500; font-family: monospace; }
+.mono {
+  font-family: monospace; font-size: 10px;
+  background: var(--content-bg); border: 0.5px solid var(--card-border);
+  padding: 1px 5px; border-radius: 4px; color: var(--text-secondary);
+}
+.badge { display: inline-flex; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 500; }
+.b-teal { background: #ECFDF5; color: #065F46; }
+.b-amber { background: #FEF3C7; color: #92400E; }
+
+.log-card {
+  background: var(--card-bg);
+  border: 0.5px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.log-hd {
+  font-size: 11px; font-weight: 500; color: var(--text-secondary);
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.log-box {
+  background: #0d1117;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.9;
+}
+.log-line { white-space: pre; }
+.log-green { color: #00E5A0; }
+.log-blue { color: #00C2FF; }
+.log-yellow { color: #F5A623; }
+.log-dim { color: rgba(255,255,255,0.25); }
