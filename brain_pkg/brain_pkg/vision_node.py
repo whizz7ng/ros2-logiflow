@@ -87,6 +87,8 @@ class VisionNode(Node):
         # YOLO 모델 로드
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
+        self.T_cam2base = np.load("/home/zzz/calibration/T_cam2base.npy")
+        self.get_logger().info("캘리브레이션 T 로드 완료")
         self.get_logger().info(f'YOLO 클래스: {self.model.names}')
 
         # 구독 - 카메라 토픽
@@ -222,17 +224,23 @@ class VisionNode(Node):
 
         # 팔 좌표 변환 (캘리브레이션 전 - 더미)
         # TODO: arm_xyz = self._cam_to_arm(cam_xyz)
-        arm_xyz = [-11.9, -72.8, 160.0]
-        self.get_logger().warn('  -> 캘리브레이션 전: 더미 팔좌표 발행')
-
+         # 캘리브레이션 변환: cam_xyz(m) → base 좌표(mm)
+        cam_pt = np.array([cam_xyz[0]*1000.0, cam_xyz[1]*1000.0, cam_xyz[2]*1000.0, 1.0])
+        base_pt = (self.T_cam2base @ cam_pt)[:3]
+        arm_xyz = [float(base_pt[0]), float(base_pt[1]), float(base_pt[2])]
+        self.get_logger().info(f'  변환된 arm_xyz(mm): {[round(v,1) for v in arm_xyz]}')
+          
         coords = list(arm_xyz) + [-150.9, 0.45, -130.41]
+
+        # /box_pose 발행
         msg = Float32MultiArray()
         msg.data = [float(v) for v in coords]
         self._box_pose_pub.publish(msg)
-        self.get_logger().info(f'/box_pose 발행: {coords}')
+        self.get_logger().info(f'/box_pose 발행: {[round(v,1) for v in coords]}')
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
+          
 
     def _get_robust_depth(self, cx, cy, k=2):
         """정렬 depth 이미지에서 (2k+1)x(2k+1) patch의 0 아닌 값 median. mm -> m."""
