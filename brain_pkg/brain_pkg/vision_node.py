@@ -222,10 +222,10 @@ class VisionNode(Node):
 
         # 팔 좌표 변환 (캘리브레이션 전 - 더미)
         # TODO: arm_xyz = self._cam_to_arm(cam_xyz)
-        arm_xyz = [200.0, 150.0, 80.0]
+        arm_xyz = [-11.9, -72.8, 160.0]
         self.get_logger().warn('  -> 캘리브레이션 전: 더미 팔좌표 발행')
 
-        coords = list(arm_xyz) + [175.35, -1.1, -89.73]
+        coords = list(arm_xyz) + [-150.9, 0.45, -130.41]
         msg = Float32MultiArray()
         msg.data = [float(v) for v in coords]
         self._box_pose_pub.publish(msg)
