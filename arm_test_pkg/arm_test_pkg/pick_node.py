@@ -467,7 +467,7 @@ class PickNode(Node):
             if not self._safe_sleep(PICK_READY_WAIT):
                 return
 
-             self._log("[PICK 3/10] 물체 위 waypoint 이동")
+            self._log("[PICK 3/10] 물체 위 waypoint 이동")
             self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
             if not self._safe_sleep(5.0):
                 return
