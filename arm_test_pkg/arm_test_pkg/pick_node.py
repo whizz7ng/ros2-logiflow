@@ -61,10 +61,53 @@ GRIPPER_SPEED = 80
 # 실제 환경에서 안전한 자세로 조정 가능
 HOME_ANGLES = [-40, 90, -130, -20, 0, 0]
 
+# 블록 피킹 전 준비 자세
+# 홈포지션에서 바로 물체 위 waypoint로 가면 관절 이동이 급격할 수 있으므로
+# 먼저 이 안전한 중간 자세를 거친 뒤 물체 위로 이동한다.
+#
+# 중요:
+# - 아래 값은 임시 추천값이다.
+# - 실제로 팔을 안전한 준비자세로 움직인 뒤 print(mc.get_angles())로 읽어서
+#   이 값을 교체하는 것이 가장 좋다.
+# - 6번축은 사용자가 확인한 "집게 세로 자세"인 40도로 둔다.
+PICK_READY_ANGLES = [0, -40, -60, 20, 0, 40]
+
 # 그리퍼 값
 # 사용하는 그리퍼에 따라 열림/닫힘 값은 테스트 후 조정 필요
 GRIPPER_OPEN = 100
 GRIPPER_CLOSE = 55
+
+
+# =========================
+# 피킹 보정값
+# =========================
+# vision_node에서 받은 z는 "물체 위치"라고 보고,
+# send_coords에 넣을 z는 실제 그리퍼 끝이 물체에 닿도록
+# 플랜지/툴 기준 위치를 위로 보정해야 한다.
+#
+# 사용자가 측정한 두 coords의 z 차이:
+# 220.6 - 87.6 = 133.0 mm
+GRIPPER_Z_OFFSET_MM = 133.0
+
+# 물체 바로 위 waypoint 높이
+# 처음 테스트는 50mm 정도가 적당하다.
+# 너무 높으면 40, 30으로 줄여가면 된다.
+APPROACH_Z_MM = 50.0
+
+# 집은 뒤 위로 들어올릴 높이
+LIFT_Z = 40.0
+
+# 6번축이 40도일 때 집게가 세로로 맞는다고 했으므로 고정값으로 사용
+GRIPPER_VERTICAL_J6 = 40.0
+
+# 내려갈 때 속도는 천천히
+DESCEND_SPEED = 8
+
+# 6번축만 보정할 때 속도
+J6_ALIGN_SPEED = 10
+
+# 피킹 준비자세로 이동할 때 대기 시간
+PICK_READY_WAIT = 3.0
 
 
 class PickNode(Node):
@@ -239,6 +282,37 @@ class PickNode(Node):
         except Exception as e:
             self.get_logger().error(f"mc.stop() 실패: {e}")
 
+    def _align_gripper_vertical(self) -> bool:
+        """
+        6번축을 세로 집기 자세로 보정한다.
+
+        send_coords는 RPY 기반 IK로 동작하기 때문에,
+        이동 후 6번축이 원하는 각도와 달라질 수 있다.
+        따라서 waypoint 이동 후 또는 하강 후에 6번축만 다시 보정한다.
+        """
+        try:
+            angles = self.mc.get_angles()
+
+            if angles == -1 or angles is None:
+                self.get_logger().warn("6번축 보정 실패: get_angles() = -1")
+                return False
+
+            if len(angles) < 6:
+                self.get_logger().warn(f"6번축 보정 실패: angles 길이 이상함: {angles}")
+                return False
+
+            self.get_logger().info(f"현재 관절각: {[round(a, 2) for a in angles]}")
+
+            angles[5] = GRIPPER_VERTICAL_J6
+            self.get_logger().info(f"6번축 세로 보정: J6 -> {GRIPPER_VERTICAL_J6}")
+
+            self.mc.send_angles(angles, J6_ALIGN_SPEED)
+            return True
+
+        except Exception as e:
+            self.get_logger().warn(f"6번축 보정 중 예외 발생: {e}")
+            return False
+
     # =========================
     # 콜백 함수
     # =========================
@@ -308,17 +382,32 @@ class PickNode(Node):
     # =========================
     def _pick_sequence(self, coords):
         """
-        피킹 시퀀스 (정면 x축 접근 + 후퇴 시 살짝 들기)
+        피킹 시퀀스 (피킹 준비자세 + 물체 위 waypoint + z축 수직 하강)
+
+        기존 방식:
+        - 블록 앞에서 x축 정면 접근
+
+        변경 방식:
+        - 홈포지션에서 바로 물체 위로 가지 않고
+          먼저 PICK_READY_ANGLES 준비자세를 거친다.
+        - 그 다음 물체 바로 위 waypoint로 이동한다.
+        - 6번축을 세로 집기 자세로 보정한다.
+        - z축으로 천천히 수직 하강한다.
+        - 다시 6번축을 40도로 보정한다.
+        - 그리퍼를 닫고 z축으로 상승한다.
+        - 홈포지션으로 복귀한다.
 
         순서:
         1. 그리퍼 열기
-        2. 블록 앞 정렬 (x 뒤로 뺀 상태로 y,z 맞춤)
-        3. x축 정면 전진
-        4. 그리퍼 닫기
-        5. z축 살짝 들어올림
-        6. x축 후퇴 (든 상태로 빠져나오기)
-        7. 홈포지션 복귀
-        8. /pick_status="done" 발행
+        2. 피킹 준비자세 이동
+        3. 물체 위 waypoint 이동
+        4. 집게 세로 정렬
+        5. z축 수직 하강
+        6. 하강 후 집게 세로 재정렬
+        7. 그리퍼 닫기
+        8. z축 상승
+        9. 홈포지션 복귀
+        10. /pick_status="done" 발행
         """
         try:
             if self.emergency_active:
@@ -326,50 +415,68 @@ class PickNode(Node):
 
             x, y, z, rx, ry, rz = coords
 
-            APPROACH_X = 60.0   # 블록 앞 안전거리 (mm)
-            LIFT_Z = 15.0       # 빼낼 때 살짝 드는 높이 (mm)
+            # vision_node에서 받은 z는 물체 위치라고 보고,
+            # 실제 send_coords에는 그리퍼 끝 길이만큼 z를 더해서
+            # 플랜지/툴 기준 좌표로 보정한다.
+            target_z = z + GRIPPER_Z_OFFSET_MM
 
-            approach = [x - APPROACH_X, y, z, rx, ry, rz]           # 블록 앞
-            target   = [x, y, z, rx, ry, rz]                       # 블록
-            lifted   = [x, y, z + LIFT_Z, rx, ry, rz]              # 살짝 든 것
-            retreat  = [x - APPROACH_X, y, z + LIFT_Z, rx, ry, rz]  # 든 상태로 후퇴
+            pre_pick = [x, y, target_z + APPROACH_Z_MM, rx, ry, rz]  # 물체 위 waypoint
+            target   = [x, y, target_z,                 rx, ry, rz]  # 실제 집는 위치
+            lifted   = [x, y, target_z + LIFT_Z,         rx, ry, rz]  # 집은 뒤 위로 상승
 
-            self._log("[PICK 1/8] 그리퍼 열기")
+            self._log(
+                f"[PICK INFO] 원본 coords={coords}, "
+                f"보정 target_z={round(target_z, 2)}, "
+                f"pre_pick={pre_pick}, target={target}, lifted={lifted}, "
+                f"PICK_READY_ANGLES={PICK_READY_ANGLES}"
+            )
+
+            self._log("[PICK 1/10] 그리퍼 열기")
             self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
             if not self._safe_sleep(1.5):
                 return
-               
-            self._log("[PICK 2/8] 블록 앞 정렬 (y,z 맞춤)")
-            self.mc.send_coords(approach, MOVE_SPEED, 1)
+
+            self._log("[PICK 2/10] 피킹 준비자세 이동")
+            self.mc.send_angles(PICK_READY_ANGLES, MOVE_SPEED)
+            if not self._safe_sleep(PICK_READY_WAIT):
+                return
+
+            self._log("[PICK 3/10] 물체 위 waypoint 이동")
+            self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
             if not self._safe_sleep(5.0):
                 return
 
-            self._log("[PICK 3/8] x축 정면 전진")
-            self.mc.send_coords(target, MOVE_SPEED, 1)
+            self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
+            self._align_gripper_vertical()
+            if not self._safe_sleep(1.5):
+                return
+
+            self._log("[PICK 5/10] z축 수직 하강")
+            self.mc.send_coords(target, DESCEND_SPEED, 1)
             if not self._safe_sleep(4.0):
                 return
 
-            self._log("[PICK 4/8] 그리퍼 닫기")
+            self._log("[PICK 6/10] 하강 후 집게 세로 재정렬 J6=40")
+            self._align_gripper_vertical()
+            if not self._safe_sleep(1.0):
+                return
+
+            self._log("[PICK 7/10] 그리퍼 닫기")
             self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
             if not self._safe_sleep(2.5):
                 return
 
-            self._log("[PICK 5/8] z축 살짝 들어올림")
+            self._log("[PICK 8/10] z축 상승")
             self.mc.send_coords(lifted, MOVE_SPEED, 1)
-            if not self._safe_sleep(2.0):
+            if not self._safe_sleep(3.0):
                 return
-   
-            self._log("[PICK 6/8] x축 후퇴 (든 상태로 빠져나오기)")
-            self.mc.send_coords(retreat, MOVE_SPEED, 1)
-            if not self._safe_sleep(4.0):
-                return
-           
-            self._log("[PICK 7/8] 홈포지션 복귀")
+
+            self._log("[PICK 9/10] 홈포지션 복귀")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             if not self._safe_sleep(4.0):
                 return
 
-            self._log("[PICK 8/8] 픽 완료")
+            self._log("[PICK 10/10] 픽 완료")
             self._pub_pick_status("done")
 
         except Exception as e:
