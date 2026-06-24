@@ -102,8 +102,8 @@ APPROACH_Z_MM = 100.0
 PICK_X_BIAS_MM = 22.0
 
 # 로봇 기준 좌우 보정
-# 왼쪽으로 더 가야 하면 + 또는 - 중 하나를 테스트해서 맞춘다.
-PICK_Y_BIAS_MM = -8.0
+# mycobot 기준 -는 오른쪽  +는 왼쪽
+PICK_Y_BIAS_MM = -11.0
 
 # 더 내려가야 하면 음수
 PICK_Z_BIAS_MM = -2.5
