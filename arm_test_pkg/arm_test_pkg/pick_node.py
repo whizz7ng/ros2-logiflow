@@ -467,25 +467,23 @@ class PickNode(Node):
             if not self._safe_sleep(PICK_READY_WAIT):
                 return
 
-            self._log("[PICK 3/10] 물체 위 waypoint 이동")
+             self._log("[PICK 3/10] 물체 위 waypoint 이동")
             self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
             if not self._safe_sleep(5.0):
                 return
-
-            # 도착한 실제 자세 읽기 (IK가 알아서 푼 자세)
-            cur = self.mc.get_coords()
-            if cur and cur != -1 and len(cur) == 6:
-                target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
-                self._log(f"[PICK] 실제 자세 읽음, 수직 하강 좌표: {[round(v,1) for v in target]}")
-            else:
-                self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
-                # target은 위에서 이미 계산된 값 유지
-            
 
             self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
             self._align_gripper_vertical()
             if not self._safe_sleep(1.5):
                 return
+
+            # J6 정렬 끝난 후의 실제 자세 읽기 (세로 정렬 반영됨)
+            cur = self.mc.get_coords()
+            if cur and cur != -1 and len(cur) == 6:
+                target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
+                self._log(f"[PICK] 정렬 후 자세로 하강: {[round(v,1) for v in target]}")
+            else:
+                self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
 
             self._log("[PICK 5/10] z축 수직 하강")
             self.mc.send_coords(target, DESCEND_SPEED, 1)
