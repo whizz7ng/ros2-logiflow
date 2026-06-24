@@ -473,7 +473,7 @@ class PickNode(Node):
                 return
 
             self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
-            self._align_gripper_vertical()
+            #self._align_gripper_vertical()
             if not self._safe_sleep(1.5):
                 return
 
@@ -483,7 +483,7 @@ class PickNode(Node):
                 return
 
             self._log("[PICK 6/10] 하강 후 집게 세로 재정렬 J6=40")
-            self._align_gripper_vertical()
+            #self._align_gripper_vertical()
             if not self._safe_sleep(1.0):
                 return
 
