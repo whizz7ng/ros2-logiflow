@@ -472,8 +472,18 @@ class PickNode(Node):
             if not self._safe_sleep(5.0):
                 return
 
+            # 도착한 실제 자세 읽기 (IK가 알아서 푼 자세)
+            cur = self.mc.get_coords()
+            if cur and cur != -1 and len(cur) == 6:
+                target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
+                self._log(f"[PICK] 실제 자세 읽음, 수직 하강 좌표: {[round(v,1) for v in target]}")
+            else:
+                self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
+                # target은 위에서 이미 계산된 값 유지
+            
+
             self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
-            #self._align_gripper_vertical()
+            self._align_gripper_vertical()
             if not self._safe_sleep(1.5):
                 return
 
@@ -482,10 +492,10 @@ class PickNode(Node):
             if not self._safe_sleep(4.0):
                 return
 
-            self._log("[PICK 6/10] 하강 후 집게 세로 재정렬 J6=40")
-            #self._align_gripper_vertical()
-            if not self._safe_sleep(1.0):
-                return
+            # self._log("[PICK 6/10] 하강 후 집게 세로 재정렬 J6=40")
+            # #self._align_gripper_vertical()
+            # if not self._safe_sleep(1.0):
+            #     return
 
             self._log("[PICK 7/10] 그리퍼 닫기")
             self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
