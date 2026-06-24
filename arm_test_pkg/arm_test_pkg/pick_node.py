@@ -75,7 +75,7 @@ PICK_READY_ANGLES = [0, -40, -60, 20, 0, 40]
 # 그리퍼 값
 # 사용하는 그리퍼에 따라 열림/닫힘 값은 테스트 후 조정 필요
 GRIPPER_OPEN = 100
-GRIPPER_CLOSE = 40
+GRIPPER_CLOSE = 30
 
 
 # =========================
