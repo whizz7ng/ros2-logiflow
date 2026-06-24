@@ -230,7 +230,7 @@ class VisionNode(Node):
         arm_xyz = [float(base_pt[0]), float(base_pt[1]), float(base_pt[2])]
         self.get_logger().info(f'  변환된 arm_xyz(mm): {[round(v,1) for v in arm_xyz]}')
           
-        coords = list(arm_xyz) + [-178.06, -0.79, -129.4]]
+        coords = list(arm_xyz) + [-178.06, -0.79, -129.4]
 
         # /box_pose 발행
         msg = Float32MultiArray()
