@@ -264,3 +264,14 @@ ros2 launch realsense2_camera rs_launch.py enable_color:=true enable_depth:=true
 3. 카메라 구조 변경: vision_node 직접 발행 → realsense2_camera 드라이버 공유 (옵션 A)
 4. 노드명 정정: `wms_node` → `wms_dashboard_node`
 
+----------------------
+# 대시 보드 키는법
+
+(백앤드)
+cd ~/proj/robot-dashboard/backend
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+(프론트)
+cd ~/proj/robot-dashboard/frontend
+npm run dev -- --host 0.0.0.0
+
