@@ -472,10 +472,10 @@ class PickNode(Node):
             if not self._safe_sleep(5.0):
                 return
 
-            self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
-            self._align_gripper_vertical()
-            if not self._safe_sleep(1.5):
-                return
+            # self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
+            # self._align_gripper_vertical()
+            # if not self._safe_sleep(1.5):
+            #     return
 
             # J6 정렬 끝난 후의 실제 자세 읽기 (세로 정렬 반영됨)
             cur = self.mc.get_coords()
