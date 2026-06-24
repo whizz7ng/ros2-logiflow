@@ -94,6 +94,20 @@ GRIPPER_Z_OFFSET_MM = 133.0
 # 너무 높으면 40, 30으로 줄여가면 된다.
 APPROACH_Z_MM = 50.0
 
+# =========================
+# 실제 피킹 미세 보정값
+# =========================
+# 목표보다 항상 한쪽으로 빗나갈 때 적용하는 보정값
+# 단위: mm
+PICK_X_BIAS_MM = 0.0
+
+# 로봇 기준 좌우 보정
+# 왼쪽으로 더 가야 하면 + 또는 - 중 하나를 테스트해서 맞춘다.
+PICK_Y_BIAS_MM = -5.0
+
+# 더 내려가야 하면 음수
+PICK_Z_BIAS_MM = -5.0
+
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 40.0
 
@@ -414,6 +428,18 @@ class PickNode(Node):
                 return
 
             x, y, z, rx, ry, rz = coords
+
+            # 실제 피킹 위치 미세 보정
+            x += PICK_X_BIAS_MM
+            y += PICK_Y_BIAS_MM
+            z += PICK_Z_BIAS_MM
+
+            self.get_logger().info(
+                f"피킹 보정 적용 후 좌표: "
+                f"x={x:.1f}, y={y:.1f}, z={z:.1f}, "
+                f"bias=({PICK_X_BIAS_MM}, {PICK_Y_BIAS_MM}, {PICK_Z_BIAS_MM})"
+            )
+
 
             # vision_node에서 받은 z는 물체 위치라고 보고,
             # 실제 send_coords에는 그리퍼 끝 길이만큼 z를 더해서
