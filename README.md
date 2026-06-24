@@ -269,9 +269,11 @@ ros2 launch realsense2_camera rs_launch.py enable_color:=true enable_depth:=true
 
 (백앤드)
 cd ~/proj/robot-dashboard/backend
+
 uvicorn main:app --host 0.0.0.0 --port 8000
 
 (프론트)
 cd ~/proj/robot-dashboard/frontend
+
 npm run dev -- --host 0.0.0.0
 
