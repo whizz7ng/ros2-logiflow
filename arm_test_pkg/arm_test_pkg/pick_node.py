@@ -429,6 +429,9 @@ class PickNode(Node):
 
             x, y, z, rx, ry, rz = coords
 
+            # 살짝 든 자세로 (ry 조정해서 그리퍼 기울임)
+            ry = ry + 15   # 15도 들기 (값은 테스트, 부호도 확인)
+
             # 실제 피킹 위치 미세 보정
             x += PICK_X_BIAS_MM
             y += PICK_Y_BIAS_MM
@@ -481,7 +484,7 @@ class PickNode(Node):
             cur = self.mc.get_coords()
             if cur and cur != -1 and len(cur) == 6:
                 target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
-                self._log(f"[PICK] 정렬 후 자세로 하강: {[round(v,1) for v in target]}")
+                self._log(f"[PICK] 하강 좌표: {[round(v,1) for v in target]}")
             else:
                 self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
 
