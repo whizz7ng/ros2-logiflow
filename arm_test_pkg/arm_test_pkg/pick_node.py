@@ -112,7 +112,7 @@ PICK_Z_BIAS_MM = -3.0
 LIFT_Z = 40.0
 
 # 6번축이 40도일 때 집게가 세로로 맞는다고 했으므로 고정값으로 사용
-GRIPPER_VERTICAL_J6 = 40.0
+GRIPPER_VERTICAL_J6 = 20.0
 
 # 내려갈 때 속도는 천천히
 DESCEND_SPEED = 8
