@@ -58,7 +58,7 @@ MODE_QR_PLACE = 'qr_place'
 # place 오프셋 (QR → 실제 놓을 위치, 실측 필요)
 # 일단 0/임시값으로 두고 QR 좌표가 base로 잘 변환되는지부터 확인.
 # 이후 바구니 안에 놓을 위치로 오프셋과 자세를 실측해서 교체.
-PLACE_OFFSET_X = -200.0
+PLACE_OFFSET_X = -190.0
 PLACE_OFFSET_Y = 0.0
 PLACE_OFFSET_Z = -140.0
 PLACE_RX = -178.0    # place 자세 (실측 후 수정)
