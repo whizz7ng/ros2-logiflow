@@ -258,7 +258,7 @@ class BrainNode(Node):
 
         self.get_logger().info(f'/nav_status 수신: {msg.data}')
 
-        if msg.data == 'arrived_objects':
+        if msg.data == ('arrived_objects', 'stop_obj'):
             if self.state != 'NAV_TO_RACK':
                 self.get_logger().warn(
                     f'arrived_objects 수신했지만 현재 상태가 NAV_TO_RACK이 아님: {self.state}'
@@ -271,7 +271,7 @@ class BrainNode(Node):
             self._publish_string(self._vision_activate_pub, self.item)
             self.get_logger().info(f'/vision_activate 발행: {self.item}')
 
-        elif msg.data == 'arrived':
+        elif msg.data == ('arrived', 'stop_qr'):
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
                     f'arrived 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
