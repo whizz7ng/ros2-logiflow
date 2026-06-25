@@ -547,7 +547,7 @@ class PickNode(Node):
            x, y, z, rx, ry, rz = coords
    
            # 픽과 동일하게 살짝 기울인 자세로 접근
-           ry = ry + 15
+           #ry = ry + 15
    
            # place도 그리퍼 끝 기준 → 플랜지 기준 z 보정
            target_z = z + GRIPPER_Z_OFFSET_MM
