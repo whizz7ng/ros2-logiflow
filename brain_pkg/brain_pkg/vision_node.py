@@ -24,7 +24,10 @@ vision_node.py  (토픽 구독 버전 - 카메라 공유용)
   /vision_activate, /brain_state
 
 발행 토픽:
-  /box_pose, /depth_qr, /detected_image
+  /box_pose    : 블록 피킹 좌표
+  /place_pose  : QR 기반 플레이싱 좌표 (방법 B)
+  /depth_qr    : QR 구역 검증
+  /detected_image
   (주의: /camera/image_compressed는 이제 드라이버가 color/image_raw로 발행하므로
    대시보드는 그쪽을 쓰거나, 필요하면 여기서 재발행)
 """
@@ -53,6 +56,8 @@ MODE_QR    = 'qr'
 MODE_QR_PLACE = 'qr_place'
 
 # place 오프셋 (QR → 실제 놓을 위치, 실측 필요)
+# 일단 0/임시값으로 두고 QR 좌표가 base로 잘 변환되는지부터 확인.
+# 이후 바구니 안에 놓을 위치로 오프셋과 자세를 실측해서 교체.
 PLACE_OFFSET_X = 0.0
 PLACE_OFFSET_Y = 0.0
 PLACE_OFFSET_Z = 0.0
@@ -150,7 +155,8 @@ class VisionNode(Node):
             self.mode = MODE_IDLE
             self.target_item = None
             self.get_logger().info('블록 검출 중지')
-        elif data == 'qr_place':                          # ← 추가
+        elif data == 'qr_place':
+            # 방법 B: QR을 인식해 플레이싱 좌표를 계산하는 모드
             self.mode = MODE_QR_PLACE
             self.get_logger().info('QR place 좌표 계산 모드')
         else:
@@ -182,11 +188,11 @@ class VisionNode(Node):
             self._detect_block()
         elif self.mode == MODE_QR:
             self._detect_qr()
-        elif self.mode == MODE_QR_PLACE:        # ← 추가
+        elif self.mode == MODE_QR_PLACE:
             self._detect_qr_place()
 
     # ----------------------------------------------------------
-    # 블록 검출 (YOLO - 캘리브레이션 전)
+    # 블록 검출 (YOLO + 캘리브레이션)
     # ----------------------------------------------------------
     def _detect_block(self):
         if self.depth_img is None or self.intrinsics is None:
@@ -237,14 +243,12 @@ class VisionNode(Node):
             f'dist={dist_m:.3f}m cam_xyz={[round(v, 3) for v in cam_xyz]}'
         )
 
-        # 팔 좌표 변환 (캘리브레이션 전 - 더미)
-        # TODO: arm_xyz = self._cam_to_arm(cam_xyz)
-         # 캘리브레이션 변환: cam_xyz(m) → base 좌표(mm)
+        # 캘리브레이션 변환: cam_xyz(m) → base 좌표(mm)
         cam_pt = np.array([cam_xyz[0]*1000.0, cam_xyz[1]*1000.0, cam_xyz[2]*1000.0, 1.0])
         base_pt = (self.T_cam2base @ cam_pt)[:3]
         arm_xyz = [float(base_pt[0]), float(base_pt[1]), float(base_pt[2])]
         self.get_logger().info(f'  변환된 arm_xyz(mm): {[round(v,1) for v in arm_xyz]}')
-          
+
         coords = list(arm_xyz) + [-178.06, -0.79, -129.4]
 
         # /box_pose 발행
@@ -255,7 +259,6 @@ class VisionNode(Node):
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
-          
 
     def _get_robust_depth(self, cx, cy, k=2):
         """정렬 depth 이미지에서 (2k+1)x(2k+1) patch의 0 아닌 값 median. mm -> m."""
@@ -291,7 +294,7 @@ class VisionNode(Node):
             self.get_logger().warn(f'detected_image 발행 실패: {e}')
 
     # ----------------------------------------------------------
-    # QR 검증
+    # QR 검증 (구역 확인용 - 좌표 계산 안 함)
     # ----------------------------------------------------------
     def _detect_qr(self):
         img = self.color_img
@@ -317,56 +320,65 @@ class VisionNode(Node):
                 out.data = f'{top_zone}:{rate:.2f}'
                 self._qr_pub.publish(out)
                 self.get_logger().info(f'/depth_qr 발행: {out.data}')
-                  
-     def _detect_qr_place(self):
-          if self.depth_img is None or self.intrinsics is None:
-              self.get_logger().warn('depth/intrinsic 준비 안 됨')
-              return
-      
-          decoded = pyzbar.decode(self.color_img)
-          if not decoded:
-              self.get_logger().warn('QR 못 찾음, 재시도')
-              return
-      
-          obj = decoded[0]
-          try:
-              zone = obj.data.decode('utf-8').strip().upper()
-          except Exception:
-              zone = '?'
-      
-          pts = obj.polygon
-          cx = int(sum(p.x for p in pts) / len(pts))
-          cy = int(sum(p.y for p in pts) / len(pts))
-      
-          dist_m = self._get_robust_depth(cx, cy)
-          if dist_m <= 0:
-              self.get_logger().warn('QR depth 측정 실패(0) - 재시도')
-              return
-      
-          fx, fy, ppx, ppy = self.intrinsics
-          X = (cx - ppx) / fx * dist_m
-          Y = (cy - ppy) / fy * dist_m
-          Z = dist_m
-      
-          self.get_logger().info(
-              f'QR place: zone={zone} 픽셀=({cx},{cy}) dist={dist_m:.3f}m'
-          )
-      
-          cam_pt = np.array([X*1000.0, Y*1000.0, Z*1000.0, 1.0])
-          base_pt = (self.T_cam2base @ cam_pt)[:3]
-      
-          place = [
-              float(base_pt[0] + PLACE_OFFSET_X),
-              float(base_pt[1] + PLACE_OFFSET_Y),
-              float(base_pt[2] + PLACE_OFFSET_Z),
-          ]
-          coords = place + [PLACE_RX, PLACE_RY, PLACE_RZ]
-      
-          msg = Float32MultiArray()
-          msg.data = [float(v) for v in coords]
-          self._place_pose_pub.publish(msg)
-          self.get_logger().info(f'/place_pose 발행: {[round(v,1) for v in coords]}')
-          self.mode = MODE_IDLE
+
+    # ----------------------------------------------------------
+    # QR 기반 플레이싱 좌표 계산 (방법 B)
+    #   QR을 인식 → 중심 픽셀 → depth → deproject →
+    #   캘리브레이션 변환 → PLACE_OFFSET 적용 → /place_pose 발행
+    #   (블록 피킹과 완전히 대칭 구조)
+    # ----------------------------------------------------------
+    def _detect_qr_place(self):
+        if self.depth_img is None or self.intrinsics is None:
+            self.get_logger().warn('depth/intrinsic 준비 안 됨')
+            return
+
+        decoded = pyzbar.decode(self.color_img)
+        if not decoded:
+            self.get_logger().warn('QR 못 찾음, 재시도')
+            return
+
+        obj = decoded[0]
+        try:
+            zone = obj.data.decode('utf-8').strip().upper()
+        except Exception:
+            zone = '?'
+
+        # QR polygon 중심 픽셀
+        pts = obj.polygon
+        cx = int(sum(p.x for p in pts) / len(pts))
+        cy = int(sum(p.y for p in pts) / len(pts))
+
+        dist_m = self._get_robust_depth(cx, cy)
+        if dist_m <= 0:
+            self.get_logger().warn('QR depth 측정 실패(0) - 재시도')
+            return
+
+        fx, fy, ppx, ppy = self.intrinsics
+        X = (cx - ppx) / fx * dist_m
+        Y = (cy - ppy) / fy * dist_m
+        Z = dist_m
+
+        self.get_logger().info(
+            f'QR place: zone={zone} 픽셀=({cx},{cy}) dist={dist_m:.3f}m'
+        )
+
+        # 캘리브레이션 변환: cam(m) → base(mm)
+        cam_pt = np.array([X*1000.0, Y*1000.0, Z*1000.0, 1.0])
+        base_pt = (self.T_cam2base @ cam_pt)[:3]
+
+        # QR 위치에서 바구니 안쪽 놓을 위치로 오프셋
+        place = [
+            float(base_pt[0] + PLACE_OFFSET_X),
+            float(base_pt[1] + PLACE_OFFSET_Y),
+            float(base_pt[2] + PLACE_OFFSET_Z),
+        ]
+        coords = place + [PLACE_RX, PLACE_RY, PLACE_RZ]
+
+        msg = Float32MultiArray()
+        msg.data = [float(v) for v in coords]
+        self._place_pose_pub.publish(msg)
+        self.get_logger().info(f'/place_pose 발행: {[round(v,1) for v in coords]}')
+        self.mode = MODE_IDLE
 
 
 def main(args=None):
