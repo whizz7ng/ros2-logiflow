@@ -528,43 +528,87 @@ class PickNode(Node):
             self._finish_task()
 
     def _place_sequence(self, coords):
-        """
-        플레이싱 시퀀스
-
-        순서:
-        1. 내려놓기 좌표로 이동
-        2. 그리퍼 열기
-        3. 홈포지션 복귀
-        4. /pick_status="placing_done" 발행
-        """
-        try:
-            if self.emergency_active:
-                return
-
-            self._log("[PLACE 1/4] 내려놓기 위치로 이동")
-            self.mc.send_coords(coords, MOVE_SPEED, 1)
-            if not self._safe_sleep(6.0):
-                return
-
-            self._log("[PLACE 2/4] 그리퍼 열기")
-            self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
-            if not self._safe_sleep(1.5):
-                return
-
-            self._log("[PLACE 3/4] 홈포지션 복귀")
-            self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
-            if not self._safe_sleep(4.0):
-                return
-
-            self._log("[PLACE 4/4] 플레이스 완료")
-            self._pub_pick_status("placing_done")
-
-        except Exception as e:
-            self.get_logger().error(f"플레이스 오류: {e}")
-            self._pub_pick_status("error")
-
-        finally:
-            self._finish_task()
+       """
+       플레이싱 시퀀스 (픽과 대칭 구조)
+   
+       순서:
+       1. 피킹 준비자세 이동 (급격한 이동 방지)
+       2. 놓을 위치 위 waypoint 이동
+       3. get_coords로 실제 자세 읽어 z만 수직 하강
+       4. 그리퍼 열기 (내려놓기)
+       5. z축 상승
+       6. 홈포지션 복귀
+       7. /pick_status="placing_done" 발행
+       """
+       try:
+           if self.emergency_active:
+               return
+   
+           x, y, z, rx, ry, rz = coords
+   
+           # 픽과 동일하게 살짝 기울인 자세로 접근
+           ry = ry + 15
+   
+           # place도 그리퍼 끝 기준 → 플랜지 기준 z 보정
+           target_z = z + GRIPPER_Z_OFFSET_MM
+   
+           pre_place = [x, y, target_z + APPROACH_Z_MM, rx, ry, rz]  # 놓을 위치 위
+           target    = [x, y, target_z,                 rx, ry, rz]  # 실제 놓는 위치
+           lifted    = [x, y, target_z + LIFT_Z,        rx, ry, rz]  # 놓고 상승
+   
+           self._log(
+               f"[PLACE INFO] 원본 coords={coords}, "
+               f"보정 target_z={round(target_z, 2)}, "
+               f"pre_place={pre_place}, target={target}, lifted={lifted}"
+           )
+   
+           self._log("[PLACE 1/7] 준비자세 이동")
+           self.mc.send_angles(PICK_READY_ANGLES, MOVE_SPEED)
+           if not self._safe_sleep(PICK_READY_WAIT):
+               return
+   
+           self._log("[PLACE 2/7] 놓을 위치 위 waypoint 이동")
+           self.mc.send_coords(pre_place, MOVE_SPEED, 1)
+           if not self._safe_sleep(5.0):
+               return
+   
+           # pre_place 도착 후 실제 자세 읽어서 그 자세로 수직 하강
+           cur = self.mc.get_coords()
+           if cur and cur != -1 and len(cur) == 6:
+               target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
+               self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
+           else:
+               self._log(f"[PLACE] get_coords 실패({cur}), 기존 target 사용")
+   
+           self._log("[PLACE 3/7] z축 수직 하강")
+           self.mc.send_coords(target, DESCEND_SPEED, 1)
+           if not self._safe_sleep(4.0):
+               return
+   
+           self._log("[PLACE 4/7] 그리퍼 열기 (내려놓기)")
+           self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+           if not self._safe_sleep(2.0):
+               return
+   
+           self._log("[PLACE 5/7] z축 상승")
+           self.mc.send_coords(lifted, MOVE_SPEED, 1)
+           if not self._safe_sleep(3.0):
+               return
+   
+           self._log("[PLACE 6/7] 홈포지션 복귀")
+           self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+           if not self._safe_sleep(4.0):
+               return
+   
+           self._log("[PLACE 7/7] 플레이스 완료")
+           self._pub_pick_status("placing_done")
+   
+       except Exception as e:
+           self.get_logger().error(f"플레이스 오류: {e}")
+           self._pub_pick_status("error")
+   
+       finally:
+           self._finish_task()
 
 
 def main(args=None):
