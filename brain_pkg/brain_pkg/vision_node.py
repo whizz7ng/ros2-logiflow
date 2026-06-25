@@ -50,6 +50,15 @@ VALID_ZONES = {'A', 'B', 'C'}
 MODE_IDLE  = 'idle'
 MODE_BLOCK = 'block'
 MODE_QR    = 'qr'
+MODE_QR_PLACE = 'qr_place'
+
+# place 오프셋 (QR → 실제 놓을 위치, 실측 필요)
+PLACE_OFFSET_X = 0.0
+PLACE_OFFSET_Y = 0.0
+PLACE_OFFSET_Z = 0.0
+PLACE_RX = -178.0    # place 자세 (실측 후 수정)
+PLACE_RY = 0.0
+PLACE_RZ = -90.0
 
 # ===== 설정 =====
 MODEL_PATH = '/home/zzz/pj3_ws/src/brain_pkg/brain_pkg/best.pt'
@@ -104,6 +113,7 @@ class VisionNode(Node):
         self._box_pose_pub       = self.create_publisher(Float32MultiArray, '/box_pose',       10)
         self._qr_pub             = self.create_publisher(String,            '/depth_qr',       10)
         self._detected_image_pub = self.create_publisher(CompressedImage,   '/detected_image', 10)
+        self._place_pose_pub     = self.create_publisher(Float32MultiArray, '/place_pose',     10)
 
         self.get_logger().info('vision_node 시작 (토픽 구독 / YOLO 통합)')
 
@@ -140,6 +150,9 @@ class VisionNode(Node):
             self.mode = MODE_IDLE
             self.target_item = None
             self.get_logger().info('블록 검출 중지')
+        elif data == 'qr_place':                          # ← 추가
+            self.mode = MODE_QR_PLACE
+            self.get_logger().info('QR place 좌표 계산 모드')
         else:
             self.target_item = data
             self.mode = MODE_BLOCK
@@ -169,6 +182,8 @@ class VisionNode(Node):
             self._detect_block()
         elif self.mode == MODE_QR:
             self._detect_qr()
+        elif self.mode == MODE_QR_PLACE:        # ← 추가
+            self._detect_qr_place()
 
     # ----------------------------------------------------------
     # 블록 검출 (YOLO - 캘리브레이션 전)
@@ -302,6 +317,56 @@ class VisionNode(Node):
                 out.data = f'{top_zone}:{rate:.2f}'
                 self._qr_pub.publish(out)
                 self.get_logger().info(f'/depth_qr 발행: {out.data}')
+                  
+     def _detect_qr_place(self):
+          if self.depth_img is None or self.intrinsics is None:
+              self.get_logger().warn('depth/intrinsic 준비 안 됨')
+              return
+      
+          decoded = pyzbar.decode(self.color_img)
+          if not decoded:
+              self.get_logger().warn('QR 못 찾음, 재시도')
+              return
+      
+          obj = decoded[0]
+          try:
+              zone = obj.data.decode('utf-8').strip().upper()
+          except Exception:
+              zone = '?'
+      
+          pts = obj.polygon
+          cx = int(sum(p.x for p in pts) / len(pts))
+          cy = int(sum(p.y for p in pts) / len(pts))
+      
+          dist_m = self._get_robust_depth(cx, cy)
+          if dist_m <= 0:
+              self.get_logger().warn('QR depth 측정 실패(0) - 재시도')
+              return
+      
+          fx, fy, ppx, ppy = self.intrinsics
+          X = (cx - ppx) / fx * dist_m
+          Y = (cy - ppy) / fy * dist_m
+          Z = dist_m
+      
+          self.get_logger().info(
+              f'QR place: zone={zone} 픽셀=({cx},{cy}) dist={dist_m:.3f}m'
+          )
+      
+          cam_pt = np.array([X*1000.0, Y*1000.0, Z*1000.0, 1.0])
+          base_pt = (self.T_cam2base @ cam_pt)[:3]
+      
+          place = [
+              float(base_pt[0] + PLACE_OFFSET_X),
+              float(base_pt[1] + PLACE_OFFSET_Y),
+              float(base_pt[2] + PLACE_OFFSET_Z),
+          ]
+          coords = place + [PLACE_RX, PLACE_RY, PLACE_RZ]
+      
+          msg = Float32MultiArray()
+          msg.data = [float(v) for v in coords]
+          self._place_pose_pub.publish(msg)
+          self.get_logger().info(f'/place_pose 발행: {[round(v,1) for v in coords]}')
+          self.mode = MODE_IDLE
 
 
 def main(args=None):
