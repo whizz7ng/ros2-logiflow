@@ -227,7 +227,27 @@ class VisionNode(Node):
 
         # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
         dist_m = self._get_robust_depth(cx, cy)
-        if dist_m <= 0.0:
+        # =========================
+        # DEPTH DEBUG: bbox 내부 depth 분포 확인
+        # =========================
+        roi = self.depth_img[y1:y2, x1:x2]
+        valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
+      
+        if len(valid) > 0:
+            self.get_logger().info(
+                f"[DEPTH DEBUG] center={dist_m*1000:.0f}mm | "
+                f"bbox min={np.min(valid):.0f}, "
+                f"p10={np.percentile(valid,10):.0f}, "
+                f"p30={np.percentile(valid,30):.0f}, "
+                f"median={np.median(valid):.0f}, "
+                f"p70={np.percentile(valid,70):.0f}, "
+                f"max={np.max(valid):.0f}, "
+                f"count={len(valid)}"
+             )
+         else:
+             self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
+      
+         if dist_m <= 0.0:
             self.get_logger().warn(f'{self.target_item} depth 측정 실패(0) - 재시도')
             return
 
