@@ -28,8 +28,6 @@ vision_node.py  (토픽 구독 버전 - 카메라 공유용)
   /place_pose  : QR 기반 플레이싱 좌표 (방법 B)
   /depth_qr    : QR 구역 검증
   /detected_image
-  (주의: /camera/image_compressed는 이제 드라이버가 color/image_raw로 발행하므로
-   대시보드는 그쪽을 쓰거나, 필요하면 여기서 재발행)
 """
 
 from collections import deque
@@ -56,8 +54,6 @@ MODE_QR    = 'qr'
 MODE_QR_PLACE = 'qr_place'
 
 # place 오프셋 (QR → 실제 놓을 위치, 실측 필요)
-# 일단 0/임시값으로 두고 QR 좌표가 base로 잘 변환되는지부터 확인.
-# 이후 바구니 안에 놓을 위치로 오프셋과 자세를 실측해서 교체.
 PLACE_OFFSET_X = -190.0
 PLACE_OFFSET_Y = 0.0
 PLACE_OFFSET_Z = -140.0
@@ -227,27 +223,28 @@ class VisionNode(Node):
 
         # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
         dist_m = self._get_robust_depth(cx, cy)
+
         # =========================
         # DEPTH DEBUG: bbox 내부 depth 분포 확인
         # =========================
         roi = self.depth_img[y1:y2, x1:x2]
         valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
-      
+
         if len(valid) > 0:
             self.get_logger().info(
                 f"[DEPTH DEBUG] center={dist_m*1000:.0f}mm | "
                 f"bbox min={np.min(valid):.0f}, "
-                f"p10={np.percentile(valid,10):.0f}, "
-                f"p30={np.percentile(valid,30):.0f}, "
+                f"p10={np.percentile(valid, 10):.0f}, "
+                f"p30={np.percentile(valid, 30):.0f}, "
                 f"median={np.median(valid):.0f}, "
-                f"p70={np.percentile(valid,70):.0f}, "
+                f"p70={np.percentile(valid, 70):.0f}, "
                 f"max={np.max(valid):.0f}, "
                 f"count={len(valid)}"
-             )
-         else:
-             self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
-      
-         if dist_m <= 0.0:
+            )
+        else:
+            self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
+
+        if dist_m <= 0.0:
             self.get_logger().warn(f'{self.target_item} depth 측정 실패(0) - 재시도')
             return
 
@@ -267,7 +264,7 @@ class VisionNode(Node):
         cam_pt = np.array([cam_xyz[0]*1000.0, cam_xyz[1]*1000.0, cam_xyz[2]*1000.0, 1.0])
         base_pt = (self.T_cam2base @ cam_pt)[:3]
         arm_xyz = [float(base_pt[0]), float(base_pt[1]), float(base_pt[2])]
-        self.get_logger().info(f'  변환된 arm_xyz(mm): {[round(v,1) for v in arm_xyz]}')
+        self.get_logger().info(f'  변환된 arm_xyz(mm): {[round(v, 1) for v in arm_xyz]}')
 
         coords = list(arm_xyz) + [-178.06, -0.79, -129.4]
 
@@ -275,7 +272,7 @@ class VisionNode(Node):
         msg = Float32MultiArray()
         msg.data = [float(v) for v in coords]
         self._box_pose_pub.publish(msg)
-        self.get_logger().info(f'/box_pose 발행: {[round(v,1) for v in coords]}')
+        self.get_logger().info(f'/box_pose 발행: {[round(v, 1) for v in coords]}')
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
@@ -397,7 +394,7 @@ class VisionNode(Node):
         msg = Float32MultiArray()
         msg.data = [float(v) for v in coords]
         self._place_pose_pub.publish(msg)
-        self.get_logger().info(f'/place_pose 발행: {[round(v,1) for v in coords]}')
+        self.get_logger().info(f'/place_pose 발행: {[round(v, 1) for v in coords]}')
         self.mode = MODE_IDLE
 
 
@@ -413,5 +410,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':      
     main()
