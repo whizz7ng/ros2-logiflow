@@ -99,14 +99,14 @@ APPROACH_Z_MM = 100.0
 # =========================
 # 목표보다 항상 한쪽으로 빗나갈 때 적용하는 보정값
 # 단위: mm
-PICK_X_BIAS_MM = 0.0
+PICK_X_BIAS_MM = -5.0
 
 # 로봇 기준 좌우 보정
 # mycobot 기준 -는 오른쪽  +는 왼쪽
-PICK_Y_BIAS_MM = -20.0
+PICK_Y_BIAS_MM = -5.0
 
 # 더 내려가야 하면 음수
-PICK_Z_BIAS_MM = -2.1
+PICK_Z_BIAS_MM = 0
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 40.0
@@ -430,8 +430,8 @@ class PickNode(Node):
             x, y, z, rx, ry, rz = coords
 
             # 오른쪽 블록 y 보정 (캘리브레이션 y 오차)
-            if y < 0:
-                y = y * 1.5   # 계수는 테스트로 조정
+            # if y < 0:
+            #     y = y * 1.5   # 계수는 테스트로 조정
             
             # 살짝 든 자세로 (ry 조정해서 그리퍼 기울임)
             ry = ry + 15   # 15도 들기 (값은 테스트, 부호도 확인)
