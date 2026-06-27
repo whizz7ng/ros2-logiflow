@@ -184,7 +184,7 @@ class PickNode(Node):
 
         # 시작 시 홈 포지션 이동
         self.get_logger().info("홈포지션으로 이동 중...")
-        try:
+        t:
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             time.sleep(4.0)
             self.get_logger().info("pick_node 준비 완료")
@@ -434,7 +434,7 @@ class PickNode(Node):
             #     y = y * 1.5   # 계수는 테스트로 조정
             
             # 살짝 든 자세로 (ry 조정해서 그리퍼 기울임)
-            ry = ry + 18   # 15도 들기 (값은 테스트, 부호도 확인)
+            ry = ry + 15   # 15도 들기 (값은 테스트, 부호도 확인)
 
             # 실제 피킹 위치 미세 보정
             x += PICK_X_BIAS_MM
@@ -500,7 +500,7 @@ class PickNode(Node):
                 descend_y = cur[1]
                 descend_rx = cur[3]
                 descend_ry = cur[4]
-                descend_rz = cur[5]
+                descend_rz = rz
             
                 start_z = cur[2]
                 end_z = target_z
