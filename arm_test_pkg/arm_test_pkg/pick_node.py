@@ -505,7 +505,7 @@ class PickNode(Node):
                 start_z = cur[2]
                 end_z = target_z
             
-                step_mm = 10.0
+                step_mm = 5.0
                 z_now = start_z
             
                 while z_now > end_z:
@@ -521,7 +521,7 @@ class PickNode(Node):
                     ]
             
                     self._log(f"[DESCEND STEP] { [round(v, 1) for v in step_target] }")
-                    self.mc.send_coords(step_target, 5, 1)
+                    self.mc.send_coords(step_target, 3, 1)
             
                     if not self._safe_sleep(0.7):
                         return
