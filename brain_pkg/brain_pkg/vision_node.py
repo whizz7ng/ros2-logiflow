@@ -223,7 +223,7 @@ class VisionNode(Node):
 
         # depth 읽기 (bbox 내 최소값 클러스터 = 블록 정면)
         roi = self.depth_img[y1:y2, x1:x2]
-        valid = roi[(roi > 130) & (roi < 250)]
+        valid = roi[(roi > 110) & (roi < 250)]
 
         if valid.size < 30:
             self.get_logger().warn('depth 없음, 발행 안 함')
