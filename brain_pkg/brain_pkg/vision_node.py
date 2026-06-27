@@ -235,7 +235,15 @@ class VisionNode(Node):
         # 실제 depth 선택에는 사용하지 않음
         # =========================
         roi = self.depth_img[y1:y2, x1:x2]
-        valid = roi[(roi > 0) & (roi < 2000)]
+        valid = roi[(roi > 160) & (roi < 250)]
+
+        if valid.size < 30:
+          self.get_logger().warn('depth 없음')
+          return
+              
+        near = np.min(valid)
+        block_face = valid[valid < near + 15]
+        dist_m = float(np.median(block_face)) / 1000.0
 
         if len(valid) > 0:
             self.get_logger().info(
@@ -298,7 +306,7 @@ class VisionNode(Node):
         self.get_logger().info(f'/box_pose 발행: {[round(v, 1) for v in coords]}')
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
-        self.mode = MODE_IDLE
+        #self.mode = MODE_IDLE
 
     def _get_robust_depth(self, cx, cy, k=12):
         """중심 (cx,cy) 주변 (2k+1)x(2k+1) patch에서 유효 depth를 모아
@@ -310,7 +318,7 @@ class VisionNode(Node):
         x0, x1 = max(0, cx - k), min(W, cx + k + 1)
          
         patch = self.depth_img[y0:y1, x0:x1]
-        valid = patch[(patch > 160) & (patch < 250)]  # mm, 2m 이하만
+        valid = patch[(patch > 160) & (patch < 350)]  # mm, 2m 이하만
          
         if valid.size < 30:
             return 0.0
