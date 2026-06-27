@@ -230,45 +230,17 @@ class VisionNode(Node):
         roi = self.depth_img[y1:y2, x1:x2]
         valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
 
-        if len(valid) > 0:
-            bbox_min = float(np.min(valid))
-            bbox_p10 = float(np.percentile(valid, 10))
-            bbox_p30 = float(np.percentile(valid, 30))
-            bbox_median = float(np.median(valid))
-            bbox_p70 = float(np.percentile(valid, 70))
-            bbox_max = float(np.max(valid))
-            bbox_count = len(valid)
-      
+                if len(valid) > 0:
             self.get_logger().info(
                 f"[DEPTH DEBUG] center={dist_m*1000:.0f}mm | "
-                f"bbox min={bbox_min:.0f}, "
-                f"p10={bbox_p10:.0f}, "
-                f"p30={bbox_p30:.0f}, "
-                f"median={bbox_median:.0f}, "
-                f"p70={bbox_p70:.0f}, "
-                f"max={bbox_max:.0f}, "
-                f"count={bbox_count}"
+                f"bbox min={np.min(valid):.0f}, "
+                f"p10={np.percentile(valid, 10):.0f}, "
+                f"p30={np.percentile(valid, 30):.0f}, "
+                f"median={np.median(valid):.0f}, "
+                f"p70={np.percentile(valid, 70):.0f}, "
+                f"max={np.max(valid):.0f}, "
+                f"count={len(valid)}"
             )
-      
-            # 중심 patch가 실패했더라도,
-            # bbox depth 분포가 충분히 촘촘하면 bbox p30을 fallback으로 사용
-            if dist_m <= 0.0:
-                spread = bbox_p70 - bbox_p10
-      
-                if bbox_count >= 300 and spread <= 40.0:
-                    dist_m = bbox_p30 / 1000.0
-                    self.get_logger().warn(
-                        f"{self.target_item} center depth 실패 -> 안정 bbox p30 사용: "
-                        f"{bbox_p30:.0f}mm, spread={spread:.0f}mm, count={bbox_count}"
-                    )
-                else:
-                    self.get_logger().warn(
-                        f"{self.target_item} bbox depth 불안정 - 재시도: "
-                        f"p10={bbox_p10:.0f}, p70={bbox_p70:.0f}, "
-                        f"spread={spread:.0f}, count={bbox_count}"
-                    )
-                    return
-
         else:
             self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
 
@@ -305,30 +277,19 @@ class VisionNode(Node):
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
 
-    def _get_robust_depth(self, cx, cy, k=7):
+   def _get_robust_depth(self, cx, cy, k=7):
         """중심 (cx,cy) 주변 (2k+1)x(2k+1) patch에서 유효 depth를 모아
         가까운 쪽(p30)을 반환. mm -> m.
         - patch를 넓게(15x15) 봐서 중심이 depth 구멍(0)이어도 주변으로 채움
         - median 대신 p30을 써서 배경(먼 값)이 섞여도 블록 표면 거리만 추출"""
         H, W = self.depth_img.shape[:2]
-
-        # 중심 주변만 점점 넓혀서 확인
-        # bbox 전체 fallback은 배경 depth가 섞일 수 있어서 사용하지 않는다.
-        for kk in [7, 10, 13, 16]:
-            y0, y1 = max(0, cy - kk), min(H, cy + kk + 1)
-            x0, x1 = max(0, cx - kk), min(W, cx + kk + 1)
-
-            patch = self.depth_img[y0:y1, x0:x1]
-            valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
-
-            if valid.size >= 5:
-                depth_mm = float(np.percentile(valid, 30))
-                self.get_logger().info(
-                    f"[DEPTH SELECT] patch k={kk}, valid={valid.size}, p30={depth_mm:.0f}mm"
-                )
-                return depth_mm / 1000.0
-
-        return 0.0
+        y0, y1 = max(0, cy - k), min(H, cy + k + 1)
+        x0, x1 = max(0, cx - k), min(W, cx + k + 1)
+        patch = self.depth_img[y0:y1, x0:x1]
+        valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
+        if valid.size < 10:
+            return 0.0
+        return float(np.percentile(valid, 30)) / 1000.0  # 가까운 쪽 30%, mm -> m
 
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
