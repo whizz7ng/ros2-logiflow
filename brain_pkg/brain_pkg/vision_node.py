@@ -265,12 +265,6 @@ class VisionNode(Node):
             )
             return
 
-        else:
-            self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
-
-        if dist_m <= 0.0:
-            self.get_logger().warn(f'{self.target_item} depth 측정 실패(0) - 재시도')
-            return
               
         # ===== dist sanity check: 블록 거리대(15~25cm) 벗어나면 발행 안 함 =====
         if not (0.15 <= dist_m <= 0.25):
