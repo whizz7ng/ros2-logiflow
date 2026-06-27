@@ -221,9 +221,24 @@ class VisionNode(Node):
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             return
 
-        # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
-        dist_m = self._get_robust_depth(cx, cy)
+        # depth 읽기 (bbox 내 최소값 클러스터 = 블록 정면)
+        roi = self.depth_img[y1:y2, x1:x2]
+        valid = roi[(roi > 160) & (roi < 250)]
 
+        if valid.size < 30:
+            self.get_logger().warn('depth 없음, 발행 안 함')
+            return
+
+        near = np.min(valid)
+        block_face = valid[valid < near + 15]
+
+        if block_face.size < 20:
+            self.get_logger().warn('블록 정면 픽셀 부족, 발행 안 함')
+            return
+
+        dist_m = float(np.median(block_face)) / 1000.0
+
+          
         # =========================
         # DEPTH DEBUG: bbox 내부 depth 분포 확인
         # =========================
