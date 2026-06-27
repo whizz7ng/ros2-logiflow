@@ -241,7 +241,8 @@ class VisionNode(Node):
           self.get_logger().warn('depth 없음')
           return
               
-        near = np.min(valid)
+        #near = np.min(valid)
+        near = np.percentile(valid, 5)  
         block_face = valid[valid < near + 15]
         dist_m = float(np.median(block_face)) / 1000.0
 
