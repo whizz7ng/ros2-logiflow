@@ -230,17 +230,45 @@ class VisionNode(Node):
         roi = self.depth_img[y1:y2, x1:x2]
         valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
 
-        if len(valid) > 0:
+         if len(valid) > 0:
+            bbox_min = float(np.min(valid))
+            bbox_p10 = float(np.percentile(valid, 10))
+            bbox_p30 = float(np.percentile(valid, 30))
+            bbox_median = float(np.median(valid))
+            bbox_p70 = float(np.percentile(valid, 70))
+            bbox_max = float(np.max(valid))
+            bbox_count = len(valid)
+
             self.get_logger().info(
                 f"[DEPTH DEBUG] center={dist_m*1000:.0f}mm | "
-                f"bbox min={np.min(valid):.0f}, "
-                f"p10={np.percentile(valid, 10):.0f}, "
-                f"p30={np.percentile(valid, 30):.0f}, "
-                f"median={np.median(valid):.0f}, "
-                f"p70={np.percentile(valid, 70):.0f}, "
-                f"max={np.max(valid):.0f}, "
-                f"count={len(valid)}"
+                f"bbox min={bbox_min:.0f}, "
+                f"p10={bbox_p10:.0f}, "
+                f"p30={bbox_p30:.0f}, "
+                f"median={bbox_median:.0f}, "
+                f"p70={bbox_p70:.0f}, "
+                f"max={bbox_max:.0f}, "
+                f"count={bbox_count}"
             )
+
+            # 중심 patch가 실패했더라도,
+            # bbox depth 분포가 충분히 촘촘하면 bbox p30을 fallback으로 사용
+            if dist_m <= 0.0:
+                spread = bbox_p70 - bbox_p10
+
+                if bbox_count >= 300 and spread <= 40.0:
+                    dist_m = bbox_p30 / 1000.0
+                    self.get_logger().warn(
+                        f"{self.target_item} center depth 실패 -> 안정 bbox p30 사용: "
+                        f"{bbox_p30:.0f}mm, spread={spread:.0f}mm, count={bbox_count}"
+                    )
+                else:
+                    self.get_logger().warn(
+                        f"{self.target_item} bbox depth 불안정 - 재시도: "
+                        f"p10={bbox_p10:.0f}, p70={bbox_p70:.0f}, "
+                        f"spread={spread:.0f}, count={bbox_count}"
+                    )
+                    return
+
         else:
             self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
 
