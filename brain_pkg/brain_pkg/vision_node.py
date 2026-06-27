@@ -230,7 +230,7 @@ class VisionNode(Node):
         roi = self.depth_img[y1:y2, x1:x2]
         valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
 
-                if len(valid) > 0:
+        if len(valid) > 0:
             self.get_logger().info(
                 f"[DEPTH DEBUG] center={dist_m*1000:.0f}mm | "
                 f"bbox min={np.min(valid):.0f}, "
@@ -277,7 +277,7 @@ class VisionNode(Node):
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
 
-   def _get_robust_depth(self, cx, cy, k=7):
+   def _get_robust_depth(self, cx, cy, k=12):
         """중심 (cx,cy) 주변 (2k+1)x(2k+1) patch에서 유효 depth를 모아
         가까운 쪽(p30)을 반환. mm -> m.
         - patch를 넓게(15x15) 봐서 중심이 depth 구멍(0)이어도 주변으로 채움
@@ -285,11 +285,18 @@ class VisionNode(Node):
         H, W = self.depth_img.shape[:2]
         y0, y1 = max(0, cy - k), min(H, cy + k + 1)
         x0, x1 = max(0, cx - k), min(W, cx + k + 1)
+         
         patch = self.depth_img[y0:y1, x0:x1]
         valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
-        if valid.size < 10:
+         
+        if valid.size < 5:
             return 0.0
-        return float(np.percentile(valid, 30)) / 1000.0  # 가까운 쪽 30%, mm -> m
+              
+        depth_mm = float(np.percentile(valid, 5))
+        self.get_logger().info(
+            f"[DEPTH SELECT] patch k={k}, valid={valid.size}, p5={depth_mm:.0f}mm"
+        )
+        return depth_mm / 1000.0
 
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
