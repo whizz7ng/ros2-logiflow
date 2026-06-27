@@ -447,7 +447,9 @@ class PickNode(Node):
             # 오른쪽 블록(y 음수)일 때 x 추가 보정
             if y < 0:
                 x += abs(y) * 0.15
-
+            else
+                x += abs(y) * 0.05
+               
             self.get_logger().info(
                 f"피킹 보정 적용 후 좌표: "
                 f"x={x:.1f}, y={y:.1f}, z={z:.1f}, "
