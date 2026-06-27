@@ -305,12 +305,12 @@ class VisionNode(Node):
         patch = self.depth_img[y0:y1, x0:x1]
         valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
          
-        if valid.size < 5:
+        if valid.size < 30:
             return 0.0
               
         depth_mm = float(np.percentile(valid, 30))
         self.get_logger().info(
-            f"[DEPTH SELECT] patch k={k}, valid={valid.size}, p5={depth_mm:.0f}mm"
+            f"[DEPTH SELECT] patch k={k}, valid={valid.size}, p30={depth_mm:.0f}mm"
         )
         return depth_mm / 1000.0
 
