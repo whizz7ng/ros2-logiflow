@@ -493,7 +493,7 @@ class PickNode(Node):
             else:
                 self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
 
-            self._log("[PICK 5/10] z축 단계별 수직 하강")
+           self._log("[PICK 5/10] z축 한번에 수직 하강")
 
             cur = self.mc.get_coords()
             if cur and cur != -1 and len(cur) == 6:
@@ -502,49 +502,17 @@ class PickNode(Node):
                 descend_rx = cur[3]
                 descend_ry = cur[4]
                 descend_rz = cur[5]
-            
-                start_z = cur[2]
+
                 end_z = target_z
-            
-                step_mm = 5.0
-                z_now = start_z
-            
-                while z_now > end_z:
-                    z_now = max(z_now - step_mm, end_z)
-            
-                    step_target = [
-                        descend_x,
-                        descend_y,
-                        z_now,
-                        descend_rx,
-                        descend_ry,
-                        descend_rz,
-                    ]
-            
-                    self._log(f"[DESCEND STEP] { [round(v, 1) for v in step_target] }")
-                    self.mc.send_coords(step_target, 3, 1)
-            
-                    if not self._safe_sleep(0.7):
-                        return
-            
-                target = [
-                    descend_x,
-                    descend_y,
-                    end_z,
-                    descend_rx,
-                    descend_ry,
-                    descend_rz,
-                ]
-            
-                lifted = [
-                    descend_x,
-                    descend_y,
-                    end_z + LIFT_Z,
-                    descend_rx,
-                    descend_ry,
-                    descend_rz,
-                ]
-            
+
+                target = [descend_x, descend_y, end_z, descend_rx, descend_ry, descend_rz]
+                lifted = [descend_x, descend_y, end_z + LIFT_Z, descend_rx, descend_ry, descend_rz]
+
+                self._log(f"[DESCEND] 한번에 하강: {[round(v, 1) for v in target]}")
+                self.mc.send_coords(target, DESCEND_SPEED, 1)
+                if not self._safe_sleep(4.0):
+                    return
+
             else:
                 self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
                 self.mc.send_coords(target, DESCEND_SPEED, 1)
