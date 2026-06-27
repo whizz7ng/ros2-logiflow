@@ -230,7 +230,7 @@ class VisionNode(Node):
             return
 
         near = np.min(valid)
-        block_face = valid[valid < near + 20]
+        block_face = valid[valid < near + 25]
 
         if block_face.size < 40:
             self.get_logger().warn('블록 정면 픽셀 부족, 발행 안 함')
