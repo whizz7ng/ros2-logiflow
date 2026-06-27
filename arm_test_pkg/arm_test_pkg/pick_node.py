@@ -99,14 +99,14 @@ APPROACH_Z_MM = 100.0
 # =========================
 # 목표보다 항상 한쪽으로 빗나갈 때 적용하는 보정값
 # 단위: mm
-PICK_X_BIAS_MM = -28.0
+PICK_X_BIAS_MM = -24.0
 
 # 로봇 기준 좌우 보정
 # mycobot 기준 -는 오른쪽  +는 왼쪽
-PICK_Y_BIAS_MM = -38.0
+PICK_Y_BIAS_MM = -30.0
 
 # 더 내려가야 하면 음수
-PICK_Z_BIAS_MM = -50.1
+PICK_Z_BIAS_MM = -40.0
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 40.0
