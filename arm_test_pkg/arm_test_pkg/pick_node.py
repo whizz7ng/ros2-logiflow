@@ -87,7 +87,7 @@ GRIPPER_CLOSE = 30
 #
 # 사용자가 측정한 두 coords의 z 차이:
 # 220.6 - 87.6 = 133.0 mm
-GRIPPER_Z_OFFSET_MM = 118.0
+GRIPPER_Z_OFFSET_MM = 133.0
 
 # 물체 바로 위 waypoint 높이
 # 처음 테스트는 50mm 정도가 적당하다.
@@ -103,10 +103,10 @@ PICK_X_BIAS_MM = 4.0
 
 # 로봇 기준 좌우 보정
 # mycobot 기준 -는 오른쪽  +는 왼쪽
-PICK_Y_BIAS_MM = 15
+PICK_Y_BIAS_MM = 0
 
 # 더 내려가야 하면 음수
-PICK_Z_BIAS_MM = -30
+PICK_Z_BIAS_MM = -18
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 40.0
