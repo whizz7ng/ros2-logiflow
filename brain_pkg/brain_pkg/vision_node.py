@@ -308,7 +308,7 @@ class VisionNode(Node):
         if valid.size < 5:
             return 0.0
               
-        depth_mm = float(np.percentile(valid, 5))
+        depth_mm = float(np.percentile(valid, 30))
         self.get_logger().info(
             f"[DEPTH SELECT] patch k={k}, valid={valid.size}, p5={depth_mm:.0f}mm"
         )
