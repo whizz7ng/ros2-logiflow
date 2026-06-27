@@ -106,7 +106,7 @@ PICK_X_BIAS_MM = 10.0
 PICK_Y_BIAS_MM = 20.0
 
 # 더 내려가야 하면 음수
-PICK_Z_BIAS_MM = -33.0
+PICK_Z_BIAS_MM = -13.0
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 40.0
