@@ -446,7 +446,7 @@ class PickNode(Node):
 
             # 오른쪽 블록(y 음수)일 때 x 추가 보정
             if y < 0:
-                x += abs(y) * 0.15
+                x += abs(y) * 0.16
             else:
                 x += abs(y) * 0.07
                
