@@ -222,7 +222,7 @@ class VisionNode(Node):
             return
 
         # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
-        dist_m = self._get__depth(cx, cy)
+        dist_m = self._get_robust_depth(cx, cy)
 
         # =========================
         # DEPTH DEBUG: bbox 내부 depth 분포 확인
