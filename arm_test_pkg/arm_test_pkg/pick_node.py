@@ -103,10 +103,10 @@ PICK_X_BIAS_MM = 28.0
 
 # 로봇 기준 좌우 보정
 # mycobot 기준 -는 오른쪽  +는 왼쪽
-PICK_Y_BIAS_MM = 40.0
+PICK_Y_BIAS_MM = 10.0
 
 # 더 내려가야 하면 음수
-PICK_Z_BIAS_MM = -2.1
+PICK_Z_BIAS_MM = -10.1
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 40.0
