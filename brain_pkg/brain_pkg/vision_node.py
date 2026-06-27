@@ -239,7 +239,7 @@ class VisionNode(Node):
         dist_m = float(np.median(block_face)) / 1000.0
           
         # 블록은 항상 170~195mm. 그 밖이면 정면 놓친 프레임이라 버림
-        if not (0.165 <= dist_m <= 0.220):
+        if not (0.165 <= dist_m <= 0.280):
             self.get_logger().warn(f'dist={dist_m:.3f}m 블록범위 밖 - 발행 안 함')
             return  
 
