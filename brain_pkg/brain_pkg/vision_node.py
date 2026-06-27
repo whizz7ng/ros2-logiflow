@@ -238,30 +238,8 @@ class VisionNode(Node):
 
         dist_m = float(np.median(block_face)) / 1000.0
 
-          
-        # =========================
-        # DEPTH DEBUG: bbox 내부 depth 분포 확인
-        # =========================
-        roi = self.depth_img[y1:y2, x1:x2]
-        valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
-
-         # =========================
-        # DEPTH DEBUG: bbox 내부 depth 분포 확인용
-        # 실제 depth 선택에는 사용하지 않음
-        # =========================
-        roi = self.depth_img[y1:y2, x1:x2]
-        valid = roi[(roi > 160) & (roi < 250)]
-
-        if valid.size < 30:
-          self.get_logger().warn('depth 없음')
-          return
-              
-        #near = np.min(valid)
-        near = np.percentile(valid, 5)  
-        block_face = valid[valid < near + 15]
-        dist_m = float(np.median(block_face)) / 1000.0
-
-        if len(valid) > 0:
+        # DEPTH DEBUG: 분포만 확인 (dist_m 재계산 안 함)
+        if valid.size > 0:
             self.get_logger().info(
                 f"[DEPTH DEBUG] selected={dist_m*1000:.0f}mm | "
                 f"bbox min={np.min(valid):.0f}, "
