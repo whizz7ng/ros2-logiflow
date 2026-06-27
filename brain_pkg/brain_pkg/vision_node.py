@@ -222,7 +222,7 @@ class VisionNode(Node):
             return
 
         # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
-        dist_m = self._get_robust_depth(cx, cy)
+        dist_m = self._get_robust_depth(cx, cy, bbox=(x1, y1, x2, y2))
 
         # =========================
         # DEPTH DEBUG: bbox 내부 depth 분포 확인
@@ -277,7 +277,7 @@ class VisionNode(Node):
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
 
-    def _get_robust_depth(self, cx, cy, k=7):
+    def _get_robust_depth(self, cx, cy, bbox=None, k=7):
         """중심 (cx,cy) 주변 (2k+1)x(2k+1) patch에서 유효 depth를 모아
         가까운 쪽(p30)을 반환. mm -> m.
         - patch를 넓게(15x15) 봐서 중심이 depth 구멍(0)이어도 주변으로 채움
@@ -287,9 +287,27 @@ class VisionNode(Node):
         x0, x1 = max(0, cx - k), min(W, cx + k + 1)
         patch = self.depth_img[y0:y1, x0:x1]
         valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
-        if valid.size < 10:
-            return 0.0
-        return float(np.percentile(valid, 30)) / 1000.0  # 가까운 쪽 30%, mm -> m
+        if valid.size >= 10:
+            return float(np.percentile(valid, 30)) / 1000.0  # 가까운 쪽 30%, mm -> m
+
+        if bbox is not None:
+            bx1, by1, bx2, by2 = bbox
+            bx1 = max(0, bx1)
+            by1 = max(0, by1)
+            bx2 = min(W, bx2)
+            by2 = min(H, by2)
+
+            roi = self.depth_img[by1:by2, bx1:bx2]
+            valid = roi[(roi > 0) & (roi < 2000)]
+
+            if valid.size >= 30:
+                depth_mm = float(np.percentile(valid, 30))
+                self.get_logger().warn(
+                    f'중심 patch depth 실패 -> bbox p30 fallback 사용: {depth_mm:.0f}mm'
+                )
+                return depth_mm / 1000.0
+
+        return 0.0
 
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
@@ -408,5 +426,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':      
+if __name__ == '__main__':
     main()
