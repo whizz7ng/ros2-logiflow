@@ -438,9 +438,9 @@ class PickNode(Node):
 
             # 실제 피킹 위치 미세 보정
             
-            #x += PICK_X_BIAS_MM
-            #y += PICK_Y_BIAS_MM
-            #z += PICK_Z_BIAS_MM
+            x += PICK_X_BIAS_MM
+            y += PICK_Y_BIAS_MM
+            z += PICK_Z_BIAS_MM
 
             self.get_logger().info(
                 f"피킹 보정 적용 후 좌표: "
