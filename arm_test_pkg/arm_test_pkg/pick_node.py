@@ -492,11 +492,63 @@ class PickNode(Node):
             else:
                 self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
 
-            self._log("[PICK 5/10] z축 수직 하강")
-            self.mc.send_coords(target, DESCEND_SPEED, 1)
-            if not self._safe_sleep(4.0):
-                return
+            self._log("[PICK 5/10] z축 단계별 수직 하강")
 
+            cur = self.mc.get_coords()
+            if cur and cur != -1 and len(cur) == 6:
+                descend_x = cur[0]
+                descend_y = cur[1]
+                descend_rx = cur[3]
+                descend_ry = cur[4]
+                descend_rz = cur[5]
+            
+                start_z = cur[2]
+                end_z = target_z
+            
+                step_mm = 10.0
+                z_now = start_z
+            
+                while z_now > end_z:
+                    z_now = max(z_now - step_mm, end_z)
+            
+                    step_target = [
+                        descend_x,
+                        descend_y,
+                        z_now,
+                        descend_rx,
+                        descend_ry,
+                        descend_rz,
+                    ]
+            
+                    self._log(f"[DESCEND STEP] { [round(v, 1) for v in step_target] }")
+                    self.mc.send_coords(step_target, 5, 1)
+            
+                    if not self._safe_sleep(0.7):
+                        return
+            
+                target = [
+                    descend_x,
+                    descend_y,
+                    end_z,
+                    descend_rx,
+                    descend_ry,
+                    descend_rz,
+                ]
+            
+                lifted = [
+                    descend_x,
+                    descend_y,
+                    end_z + LIFT_Z,
+                    descend_rx,
+                    descend_ry,
+                    descend_rz,
+                ]
+            
+            else:
+                self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
+                self.mc.send_coords(target, DESCEND_SPEED, 1)
+                if not self._safe_sleep(4.0):
+                    return
             # self._log("[PICK 6/10] 하강 후 집게 세로 재정렬 J6=40")
             # #self._align_gripper_vertical()
             # if not self._safe_sleep(1.0):
