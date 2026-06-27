@@ -500,7 +500,7 @@ class PickNode(Node):
                 descend_y = cur[1]
                 descend_rx = cur[3]
                 descend_ry = cur[4]
-                descend_rz = rz
+                descend_rz = cur[5]
             
                 start_z = cur[2]
                 end_z = target_z
@@ -599,7 +599,7 @@ class PickNode(Node):
            x, y, z, rx, ry, rz = coords
    
            # 픽과 동일하게 살짝 기울인 자세로 접근
-           ry = ry + 15
+           ry = ry + 8
    
            # place도 그리퍼 끝 기준 → 플랜지 기준 z 보정
            target_z = z + GRIPPER_Z_OFFSET_MM
