@@ -263,6 +263,13 @@ class VisionNode(Node):
         if dist_m <= 0.0:
             self.get_logger().warn(f'{self.target_item} depth 측정 실패(0) - 재시도')
             return
+              
+        # ===== dist sanity check: 블록 거리대(15~25cm) 벗어나면 발행 안 함 =====
+        if not (0.15 <= dist_m <= 0.25):
+            self.get_logger().warn(
+                f'{self.target_item} dist={dist_m:.3f}m 범위밖(0.15~0.25) - 배경 의심, 발행 안 함'
+            )
+            return
 
         # 카메라 3D 좌표 (deproject) - intrinsic으로 직접 계산
         fx, fy, ppx, ppy = self.intrinsics
@@ -303,7 +310,7 @@ class VisionNode(Node):
         x0, x1 = max(0, cx - k), min(W, cx + k + 1)
          
         patch = self.depth_img[y0:y1, x0:x1]
-        valid = patch[(patch > 0) & (patch < 400)]  # mm, 2m 이하만
+        valid = patch[(patch > 160) & (patch < 250)]  # mm, 2m 이하만
          
         if valid.size < 30:
             return 0.0
