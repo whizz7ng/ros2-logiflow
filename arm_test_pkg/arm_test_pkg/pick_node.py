@@ -184,7 +184,7 @@ class PickNode(Node):
 
         # 시작 시 홈 포지션 이동
         self.get_logger().info("홈포지션으로 이동 중...")
-        
+        try:
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             time.sleep(4.0)
             self.get_logger().info("pick_node 준비 완료")
