@@ -222,7 +222,7 @@ class VisionNode(Node):
             return
 
         # depth 읽기 (정렬된 depth 이미지에서 patch median, mm -> m)
-        dist_m = self._get_robust_depth(cx, cy)
+        dist_m = self._get__depth(cx, cy)
 
         # =========================
         # DEPTH DEBUG: bbox 내부 depth 분포 확인
@@ -277,21 +277,19 @@ class VisionNode(Node):
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
 
-    def _get_robust_depth(self, cx, cy, k=2):
-        """정렬 depth 이미지에서 (2k+1)x(2k+1) patch의 0 아닌 값 median. mm -> m."""
+    def _get_robust_depth(self, cx, cy, k=7):
+        """중심 (cx,cy) 주변 (2k+1)x(2k+1) patch에서 유효 depth를 모아
+        가까운 쪽(p30)을 반환. mm -> m.
+        - patch를 넓게(15x15) 봐서 중심이 depth 구멍(0)이어도 주변으로 채움
+        - median 대신 p30을 써서 배경(먼 값)이 섞여도 블록 표면 거리만 추출"""
         H, W = self.depth_img.shape[:2]
-        vals = []
-        for dy in range(-k, k + 1):
-            for dx in range(-k, k + 1):
-                px, py = cx + dx, cy + dy
-                if 0 <= px < W and 0 <= py < H:
-                    d = int(self.depth_img[py, px])  # mm
-                    if d > 0:
-                        vals.append(d)
-        if not vals:
+        y0, y1 = max(0, cy - k), min(H, cy + k + 1)
+        x0, x1 = max(0, cx - k), min(W, cx + k + 1)
+        patch = self.depth_img[y0:y1, x0:x1]
+        valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
+        if valid.size < 10:
             return 0.0
-        vals.sort()
-        return vals[len(vals) // 2] / 1000.0  # mm -> m
+        return float(np.percentile(valid, 30)) / 1000.0  # 가까운 쪽 30%, mm -> m
 
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
