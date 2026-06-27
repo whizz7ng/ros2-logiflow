@@ -277,7 +277,7 @@ class VisionNode(Node):
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         self.mode = MODE_IDLE
 
-   def _get_robust_depth(self, cx, cy, k=12):
+    def _get_robust_depth(self, cx, cy, k=12):
         """중심 (cx,cy) 주변 (2k+1)x(2k+1) patch에서 유효 depth를 모아
         가까운 쪽(p30)을 반환. mm -> m.
         - patch를 넓게(15x15) 봐서 중심이 depth 구멍(0)이어도 주변으로 채움
