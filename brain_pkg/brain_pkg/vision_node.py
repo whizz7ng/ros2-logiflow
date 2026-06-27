@@ -97,7 +97,7 @@ class VisionNode(Node):
         # YOLO 모델 로드
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
-        self.T_cam2base = np.load("/home/zzz/calibration/T_cam2base.npy")
+        self.T_cam2base = np.load("/home/zzz/calibration/T_cam2base_backup_20260626_233813.npy")
         self.get_logger().info("캘리브레이션 T 로드 완료")
         self.get_logger().info(f'YOLO 클래스: {self.model.names}')
 
