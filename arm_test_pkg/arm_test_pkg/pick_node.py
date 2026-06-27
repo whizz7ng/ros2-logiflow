@@ -429,7 +429,7 @@ class PickNode(Node):
 
             x, y, z, rx, ry, rz = coords
 
-            오른쪽 블록 y 보정 (캘리브레이션 y 오차)
+            #오른쪽 블록 y 보정 (캘리브레이션 y 오차)
             if y < 0:
                 y = y * 1.5   # 계수는 테스트로 조정
             
