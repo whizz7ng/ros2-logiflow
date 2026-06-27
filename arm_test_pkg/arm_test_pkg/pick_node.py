@@ -493,7 +493,7 @@ class PickNode(Node):
             else:
                 self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
 
-           self._log("[PICK 5/10] z축 한번에 수직 하강")
+            self._log("[PICK 5/10] z축 한번에 수직 하강")
 
             cur = self.mc.get_coords()
             if cur and cur != -1 and len(cur) == 6:
