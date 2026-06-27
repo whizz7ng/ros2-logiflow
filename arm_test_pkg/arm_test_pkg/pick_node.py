@@ -448,7 +448,7 @@ class PickNode(Node):
             if y < 0:
                 x += abs(y) * 0.15
             else:
-                x += abs(y) * 0.05
+                x += abs(y) * 0.07
                
             self.get_logger().info(
                 f"피킹 보정 적용 후 좌표: "
