@@ -249,8 +249,15 @@ ros2 launch realsense2_camera rs_launch.py \
   rgb_camera.color_profile:=640x480x30 \
   json_file_path:=/home/zzz/short_range.json
 
-#shor range mode
+#short range mode
 ros2 param set /camera/camera depth_module.visual_preset 5
+
+D435i 픽셀 노이즈 제거
+ros2 param set /camera/camera spatial_filter.enable true
+ros2 param set /camera/camera temporal_filter.enable true
+ros2 param set /camera/camera hole_filling_filter.enable true
+
+
 ```
 
 ---
