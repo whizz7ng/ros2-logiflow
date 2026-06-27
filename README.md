@@ -248,6 +248,9 @@ ros2 launch realsense2_camera rs_launch.py \
   align_depth.enable:=true \
   rgb_camera.color_profile:=640x480x30 \
   json_file_path:=/home/zzz/short_range.json
+
+#shor range mode
+ros2 param set /camera/camera depth_module.visual_preset 5
 ```
 
 ---
