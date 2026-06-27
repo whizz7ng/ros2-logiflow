@@ -283,13 +283,24 @@ class VisionNode(Node):
         - patch를 넓게(15x15) 봐서 중심이 depth 구멍(0)이어도 주변으로 채움
         - median 대신 p30을 써서 배경(먼 값)이 섞여도 블록 표면 거리만 추출"""
         H, W = self.depth_img.shape[:2]
-        y0, y1 = max(0, cy - k), min(H, cy + k + 1)
-        x0, x1 = max(0, cx - k), min(W, cx + k + 1)
-        patch = self.depth_img[y0:y1, x0:x1]
-        valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
-        if valid.size < 10:
-            return 0.0
-        return float(np.percentile(valid, 30)) / 1000.0  # 가까운 쪽 30%, mm -> m
+
+        # 중심 주변만 점점 넓혀서 확인
+        # bbox 전체 fallback은 배경 depth가 섞일 수 있어서 사용하지 않는다.
+        for kk in [7, 10, 13, 16]:
+            y0, y1 = max(0, cy - kk), min(H, cy + kk + 1)
+            x0, x1 = max(0, cx - kk), min(W, cx + kk + 1)
+
+            patch = self.depth_img[y0:y1, x0:x1]
+            valid = patch[(patch > 0) & (patch < 2000)]  # mm, 2m 이하만
+
+            if valid.size >= 5:
+                depth_mm = float(np.percentile(valid, 30))
+                self.get_logger().info(
+                    f"[DEPTH SELECT] patch k={kk}, valid={valid.size}, p30={depth_mm:.0f}mm"
+                )
+                return depth_mm / 1000.0
+
+        return 0.0
 
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
