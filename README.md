@@ -240,13 +240,14 @@ D435i 한 대를 드라이버가 열고, vision_node·대시보드·라인트레
 ```
 ros2 launch realsense2_camera rs_launch.py enable_color:=true enable_depth:=true align_depth.enable:=true rgb_camera.color_profile:=640x480x30
 ros2 launch realsense2_camera rs_launch.py   qos_overrides./camera/camera.color_qos:=1   qos_overrides./camera/camera.depth_qos:=1   enable_color:=true   enable_depth:=true   align_depth.enable:=true
+
+#short range mode
 ros2 launch realsense2_camera rs_launch.py \
-  qos_overrides./camera/camera.color_qos:=1 \
-  qos_overrides./camera/camera.depth_qos:=1 \
   enable_color:=true \
   enable_depth:=true \
   align_depth.enable:=true \
-  depth_module.visual_preset:=5
+  rgb_camera.color_profile:=640x480x30 \
+  json_file_path:=/home/zzz/short_range.json
 ```
 
 ---
