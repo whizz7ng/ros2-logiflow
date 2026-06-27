@@ -230,42 +230,32 @@ class VisionNode(Node):
         roi = self.depth_img[y1:y2, x1:x2]
         valid = roi[(roi > 0) & (roi < 2000)]  # mm 단위, 2m 이하만 확인
 
+         # =========================
+        # DEPTH DEBUG: bbox 내부 depth 분포 확인용
+        # 실제 depth 선택에는 사용하지 않음
+        # =========================
+        roi = self.depth_img[y1:y2, x1:x2]
+        valid = roi[(roi > 0) & (roi < 2000)]
+
         if len(valid) > 0:
-            bbox_min = float(np.min(valid))
-            bbox_p10 = float(np.percentile(valid, 10))
-            bbox_p30 = float(np.percentile(valid, 30))
-            bbox_median = float(np.median(valid))
-            bbox_p70 = float(np.percentile(valid, 70))
-            bbox_max = float(np.max(valid))
-            bbox_count = len(valid)
-
             self.get_logger().info(
-                f"[DEPTH DEBUG] center={dist_m*1000:.0f}mm | "
-                f"bbox min={bbox_min:.0f}, "
-                f"p10={bbox_p10:.0f}, "
-                f"p30={bbox_p30:.0f}, "
-                f"median={bbox_median:.0f}, "
-                f"p70={bbox_p70:.0f}, "
-                f"max={bbox_max:.0f}, "
-                f"count={bbox_count}"
+                f"[DEPTH DEBUG] selected={dist_m*1000:.0f}mm | "
+                f"bbox min={np.min(valid):.0f}, "
+                f"p10={np.percentile(valid, 10):.0f}, "
+                f"p30={np.percentile(valid, 30):.0f}, "
+                f"median={np.median(valid):.0f}, "
+                f"p70={np.percentile(valid, 70):.0f}, "
+                f"max={np.max(valid):.0f}, "
+                f"count={len(valid)}"
             )
+        else:
+            self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
 
-            # 중심 patch가 실패했을 때만 bbox의 '가까운 쪽' depth 사용
-            # p30/median은 배경을 먹을 수 있으므로 사용하지 않음
-            if dist_m <= 0.0:
-                if bbox_count >= 300 and 80.0 <= bbox_p10 <= 500.0:
-                    dist_m = bbox_p10 / 1000.0
-                    self.get_logger().warn(
-                        f"{self.target_item} center depth 실패 -> bbox 가까운 p10 사용: "
-                        f"{bbox_p10:.0f}mm "
-                        f"(p30={bbox_p30:.0f}, median={bbox_median:.0f}, count={bbox_count})"
-                    )
-                else:
-                    self.get_logger().warn(
-                        f"{self.target_item} bbox 가까운 depth도 불안정 - 재시도: "
-                        f"p10={bbox_p10:.0f}, count={bbox_count}"
-                    )
-                    return
+        if dist_m <= 0.0:
+            self.get_logger().warn(
+                f'{self.target_item} center raw depth 측정 실패(0) - /box_pose 발행 안 함'
+            )
+            return
 
         else:
             self.get_logger().warn("[DEPTH DEBUG] bbox valid depth 없음")
