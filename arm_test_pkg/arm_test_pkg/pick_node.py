@@ -477,7 +477,7 @@ class PickNode(Node):
 
             self._log("[PICK 3/10] 물체 위 waypoint 이동")
             self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
-            if not self._safe_sleep(5.0):
+            if not self._safe_sleep(7.0):
                 return
 
             # self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
@@ -496,6 +496,9 @@ class PickNode(Node):
             self._log("[PICK 5/10] z축 step 수직 하강")
 
             cur = self.mc.get_coords()
+            if cur is None or cur == -1:
+                time.sleep(1.0)
+                cur = self.mc.get_coords()   # 한 번 더 시도
             if cur and cur != -1 and len(cur) == 6:
                 descend_x = cur[0]
                 descend_y = cur[1]
