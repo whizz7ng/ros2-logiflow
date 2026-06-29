@@ -483,11 +483,6 @@ class PickNode(Node):
             if not self._safe_sleep(PICK_READY_WAIT):
                 return
 
-            self._log("[PICK 3/10] 물체 위 waypoint 이동")
-            self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
-            if not self._safe_sleep(7.0):
-                return
-
             # self._log("[PICK 4/10] 집게 세로 정렬 J6=40")
             # self._align_gripper_vertical()
             # if not self._safe_sleep(1.5):
@@ -499,7 +494,7 @@ class PickNode(Node):
             if not self._safe_sleep(7.0):
                 return
 
-            self._log("[PICK 5/10] z축 step 수직 하강 (받은 좌표 기준)")
+            self._log("[PICK 4/10] z축 step 수직 하강 (받은 좌표 기준)")
 
             # get_coords 미사용: brain이 준 좌표(x, y)를 그대로 사용
             # → myCobot get_coords의 간헐적 오값으로 인한 경로 튐 방지
@@ -552,22 +547,22 @@ class PickNode(Node):
             # if not self._safe_sleep(1.0):
             #     return
 
-            self._log("[PICK 7/10] 그리퍼 닫기")
+            self._log("[PICK 5/10] 그리퍼 닫기")
             self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
             if not self._safe_sleep(2.5):
                 return
 
-            self._log("[PICK 8/10] z축 상승")
+            self._log("[PICK 6/10] z축 상승")
             self.mc.send_coords(lifted, MOVE_SPEED, 1)
             if not self._safe_sleep(3.0):
                 return
 
-            self._log("[PICK 9/10] 홈포지션 복귀")
+            self._log("[PICK 7/10] 홈포지션 복귀")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             if not self._safe_sleep(4.0):
                 return
 
-            self._log("[PICK 10/10] 픽 완료")
+            self._log("[PICK 8/10] 픽 완료")
             self._pub_pick_status("done")
 
         except Exception as e:
