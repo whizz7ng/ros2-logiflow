@@ -55,7 +55,7 @@ MODE_QR_PLACE = 'qr_place'
 
 # place 오프셋 (QR → 실제 놓을 위치, 실측 필요)
 PLACE_OFFSET_X = -190.0
-PLACE_OFFSET_Y = 0.0
+PLACE_OFFSET_Y = -40.0
 PLACE_OFFSET_Z = -140.0
 PLACE_RX = -178.0    # place 자세 (실측 후 수정)
 PLACE_RY = 0.0
