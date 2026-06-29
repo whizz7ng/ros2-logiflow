@@ -311,7 +311,7 @@ class VisionNode(Node):
         x0, x1 = max(0, cx - k), min(W, cx + k + 1)
          
         patch = self.depth_img[y0:y1, x0:x1]
-        valid = patch[(patch > 160) & (patch < 350)]  # mm, 2m 이하만
+        valid = patch[(patch > 160) & (patch < 500)]  # mm, 2m 이하만
          
         if valid.size < 30:
             return 0.0
