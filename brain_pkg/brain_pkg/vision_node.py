@@ -265,12 +265,12 @@ class VisionNode(Node):
             return
 
               
-        # ===== dist sanity check: 블록 거리대(15~25cm) 벗어나면 발행 안 함 =====
-        if not (0.15 <= dist_m <= 0.25):
-            self.get_logger().warn(
-                f'{self.target_item} dist={dist_m:.3f}m 범위밖(0.15~0.25) - 배경 의심, 발행 안 함'
-            )
-            return
+        # # ===== dist sanity check: 블록 거리대(15~25cm) 벗어나면 발행 안 함 =====
+        # if not (0.15 <= dist_m <= 0.25):
+        #     self.get_logger().warn(
+        #         f'{self.target_item} dist={dist_m:.3f}m 범위밖(0.15~0.25) - 배경 의심, 발행 안 함'
+        #     )
+        #     return
 
         # 카메라 3D 좌표 (deproject) - intrinsic으로 직접 계산
         fx, fy, ppx, ppy = self.intrinsics
