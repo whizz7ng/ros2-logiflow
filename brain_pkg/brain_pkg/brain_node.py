@@ -84,7 +84,7 @@ class BrainNode(Node):
         self._place_target_pub = self.create_publisher(String, '/place_target', 10)
         self._arm_status_pub = self.create_publisher(String, '/arm_status', 10)
         self._go_parking_pub = self.create_publisher(Empty, '/go_parking', 10)
-        self._wms_update_pub = self.create_publisher(String, '/wms_update', 10)
+        self.__pub = self.create_publisher(String, '/', 10)
         self._brain_state_pub = self.create_publisher(String, '/brain_state', 10)
 
         # Internal states
@@ -151,8 +151,8 @@ class BrainNode(Node):
     
         w_msg = String()
         w_msg.data = f'{self.item}:{self.zone}:done'   # ← 3개 (label:zone:done)
-        self._wms_update_pub.publish(w_msg)
-        self.get_logger().info(f'/wms_update 발행: {w_msg.data}'))
+        self.__pub.publish(w_msg)
+        self.get_logger().info(f'/wms_update 발행: {w_msg.data}')
 
         self.current_order = None
         self.zone = None
