@@ -494,45 +494,34 @@ class PickNode(Node):
             #     return
 
             # J6 정렬 끝난 후의 실제 자세 읽기 (세로 정렬 반영됨)
-            cur = self.mc.get_coords()
-            if cur and cur != -1 and len(cur) == 6:
-                target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
-                self._log(f"[PICK] 하강 좌표: {[round(v,1) for v in target]}")
-            else:
-                self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
+            self._log("[PICK 3/10] 물체 위 waypoint 이동")
+            self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
+            if not self._safe_sleep(7.0):
+                return
 
-            self._log("[PICK 5/10] z축 step 수직 하강")
+            self._log("[PICK 5/10] z축 step 수직 하강 (받은 좌표 기준)")
 
-            cur = self.mc.get_coords()
-            if cur is None or cur == -1:
-                time.sleep(1.0)
-                cur = self.mc.get_coords()   # 한 번 더 시도
-            if cur and cur != -1 and len(cur) == 6:
-                descend_x = cur[0]
-                descend_y = cur[1]
-                descend_rx = cur[3]
-                descend_ry = cur[4]
-                descend_rz = cur[5]
+            # get_coords 미사용: brain이 준 좌표(x, y)를 그대로 사용
+            # → myCobot get_coords의 간헐적 오값으로 인한 경로 튐 방지
+            descend_x = x
+            descend_y = y
+            descend_rx = rx
+            descend_ry = ry
+            descend_rz = rz
 
-                end_z = target_z
-                lifted = [descend_x, descend_y, end_z + LIFT_Z, descend_rx, descend_ry, descend_rz]
+            end_z = target_z
+            lifted = [descend_x, descend_y, end_z + LIFT_Z, descend_rx, descend_ry, descend_rz]
 
-                start_z = cur[2]
-                step_mm = 20.0
-                z_now = start_z
+            start_z = target_z + APPROACH_Z_MM   # pre_pick 높이에서 시작
+            step_mm = 20.0
+            z_now = start_z
 
-                while z_now > end_z:
-                    z_now = max(z_now - step_mm, end_z)
-                    step_target = [descend_x, descend_y, z_now, descend_rx, descend_ry, descend_rz]
-                    self._log(f"[DESCEND STEP] {[round(v,1) for v in step_target]}")
-                    self.mc.send_coords(step_target, DESCEND_SPEED, 1)
-                    if not self._safe_sleep(1.0):
-                        return
-
-            else:
-                self._log(f"[PICK] get_coords 실패({cur}), 기존 target 사용")
-                self.mc.send_coords(target, DESCEND_SPEED, 1)
-                if not self._safe_sleep(4.0):
+            while z_now > end_z:
+                z_now = max(z_now - step_mm, end_z)
+                step_target = [descend_x, descend_y, z_now, descend_rx, descend_ry, descend_rz]
+                self._log(f"[DESCEND STEP] {[round(v,1) for v in step_target]}")
+                self.mc.send_coords(step_target, DESCEND_SPEED, 1)
+                if not self._safe_sleep(1.0):
                     return
 
             # cur = self.mc.get_coords()
