@@ -358,25 +358,33 @@ class PickNode(Node):
                 return
 
             # ===== [변경] PICK_READY 단계 삭제. 관측 자세에서 바로 물체 위로 =====
-            self._log("[PICK 2/7] 물체 위 waypoint 이동")
-            self.mc.send_coords(pre_pick, MOVE_SPEED, 0)
+            # self._log("[PICK 2/7] 물체 위 waypoint 이동")
+            # self.mc.send_coords(pre_pick, MOVE_SPEED, 0)
+            # if not self._safe_sleep(7.0):
+            #     return
+
+            # self._log("[PICK 3/7] z축 step 수직 하강 (받은 x,y 그대로)")
+            # # get_coords 미사용: myCobot 간헐 오값으로 인한 경로 튐 방지
+            # end_z = target_z
+            # start_z = target_z + APPROACH_Z_MM
+            # step_mm = 20.0
+            # z_now = start_z
+            # while z_now > end_z:
+            #     z_now = max(z_now - step_mm, end_z)
+            #     step_target = [x, y, z_now, rx, ry, rz]
+            #     self._log(f"[DESCEND STEP] {[round(v,1) for v in step_target]}")
+            #     self.mc.send_coords(step_target, DESCEND_SPEED, 1)
+            #     if not self._safe_sleep(1.0):
+            #         return
+
+            # ===== 관측 자세에서 파지 위치로 바로 (mode 0) =====
+            # offset이 반영된 flange 목표 = 블록 딱 잡는 위치. 기울어진 자세라 z 하강 안 함.
+            target = [x, y, target_z, rx, ry, rz]
+            self._log(f"[PICK 2/3] 파지 위치로 바로 이동: {[round(v,1) for v in target]}")
+            self.mc.send_coords(target, MOVE_SPEED, 0)
             if not self._safe_sleep(7.0):
                 return
-
-            self._log("[PICK 3/7] z축 step 수직 하강 (받은 x,y 그대로)")
-            # get_coords 미사용: myCobot 간헐 오값으로 인한 경로 튐 방지
-            end_z = target_z
-            start_z = target_z + APPROACH_Z_MM
-            step_mm = 20.0
-            z_now = start_z
-            while z_now > end_z:
-                z_now = max(z_now - step_mm, end_z)
-                step_target = [x, y, z_now, rx, ry, rz]
-                self._log(f"[DESCEND STEP] {[round(v,1) for v in step_target]}")
-                self.mc.send_coords(step_target, DESCEND_SPEED, 1)
-                if not self._safe_sleep(1.0):
-                    return
-
+          
             self._log("[PICK 4/7] 그리퍼 닫기")
             self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
             if not self._safe_sleep(2.5):
