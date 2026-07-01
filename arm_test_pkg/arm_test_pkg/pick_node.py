@@ -103,7 +103,7 @@ PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 
 # 집은 뒤 위로 들어올릴 높이
-LIFT_Z = 30.0
+LIFT_Z = 40.0
 
 # 내려갈 때 속도는 천천히
 DESCEND_SPEED = 8
