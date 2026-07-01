@@ -76,7 +76,11 @@ GRIPPER_CLOSE = 30
 #        eye-in-hand에서 반드시 재측정할 것.
 #        측정법: bias 전부 0인 상태에서 블록 하나 파지 시도 ->
 #                그리퍼 끝이 블록보다 얼마나 높이/낮게 멈추는지 보고 조정.
-GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
+#GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
+
+# 기울어진 파지 자세에서 flange↔그리퍼끝 offset (3축 다)
+# 자세각 [-102.25, -38.21, -82.48] 기준 실측
+GRIP_OFFSET = [-54.4, 13.2, 25.5]   # 블록좌표 → flange 목표
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 10.0
@@ -88,9 +92,9 @@ APPROACH_Z_MM = 10.0
 # 새 eye-in-hand calib 기준으로는 0에서 시작해서 실측으로 다시 잡아야 함.
 # 순수 calib 정확도부터 확인(vision arm_xyz 로그 vs 실제 블록 위치)한 뒤,
 # 빗나가는 만큼만 아래를 채울 것.
-PICK_X_BIAS_MM = -5.0     # 이전: 12.0
+PICK_X_BIAS_MM = 0.0     # 이전: 12.0
 PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
-PICK_Z_BIAS_MM = 10.0     # 이전: -10.0
+PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 30.0
