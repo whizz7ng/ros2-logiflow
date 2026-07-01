@@ -84,8 +84,8 @@ GRIPPER_CLOSE = 30
 # 파지 offset (3축) - 기울어진 그리퍼라 x,y,z 다 필요
 # 블록좌표 → flange 목표. 자세각 [-102.25,-38.21,-82.48]에서 실측.
 # =========================
-GRIP_OFFSET_X = -50.4
-GRIP_OFFSET_Y = 0
+GRIP_OFFSET_X = -54.4
+GRIP_OFFSET_Y = 2.0
 GRIP_OFFSET_Z = 50.5
 
 # 물체 바로 위 waypoint 높이
