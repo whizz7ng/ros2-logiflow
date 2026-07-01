@@ -2,56 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-brain_node.py
+brain_node.py  (eye-in-hand 관측 흐름 추가 버전)
 
-뷰티 풀필먼트 피킹/소팅 자동화 FSM Brain Node
+[eye-in-hand 변경 요약]
+  (1) 주문 포맷에 층(level) 추가: "물품:구역:층"  예) "red_cross:A:1"
+      - 층 없으면 기본 1층 (하위호환)
+  (2) VISION 진입 시 곧바로 /vision_activate 하지 않고,
+      먼저 pick_node에 관측 자세로 가라고 명령(/observe_move) →
+      pick_node가 도착 신호(/observe_ready) 보내면 그때 /vision_activate 발행.
+      (카메라가 그리퍼에 붙어서, 팔이 관측 자세에 있어야 vision 좌표계산이 맞음)
+  (3) /vision_activate 포맷: "item:level" (vision_node가 층별 T_cam2base 선택)
 
-통신 기준:
-
-[WMS -> Brain]
-/order_request : std_msgs/String
-    포맷: "물품:구역"  예) "red_triangle:A"
-
-[Brain -> WMS]
-/wms_update : std_msgs/String
-
-[Brain -> Dashboard]
-/brain_state : std_msgs/String
-
-[Brain -> Vision]
-/vision_activate : std_msgs/String
-    물품 라벨 또는 "stop" 또는 "qr_place"
-
-[Vision -> Brain]
-/box_pose   : std_msgs/Float32MultiArray   (블록 피킹 좌표)
-/place_pose : std_msgs/Float32MultiArray   (QR 기반 플레이싱 좌표)
-
-[Brain -> Pick]
-/pick_command : std_msgs/Float32MultiArray
-/place_command : std_msgs/Float32MultiArray
-
-[Pick -> Brain]
-/pick_status : std_msgs/String
-    "done", "placing_done", "error"
-
-[Brain -> AGV/Nav]
-/place_target : std_msgs/String
-    "A", "B", "C"
-
-/arm_status : std_msgs/String
-    "picked", "placed"
-
-/go_parking : std_msgs/Empty
-
-[AGV/Nav -> Brain]
-/nav_status : std_msgs/String
-    "arrived_objects" | "stop_obj"  (rack 도착)
-    "arrived" | "stop_qr"           (QR 도착)
-    "parked"                        (주차 완료)
-
-[Keyboard -> Brain/Pick/Nav]
-/emergency_stop : std_msgs/String
-    "stop", "reset"
+새 토픽:
+  /observe_move  (String) brain -> pick : 관측할 층 번호 "1"/"2"
+  /observe_ready (String) pick -> brain : 관측 자세 도착 완료 "ready"
 """
 
 from collections import deque
@@ -61,13 +25,16 @@ from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray, Empty
 
 
-# 포장구역별 로봇팔 플레이싱 좌표 (방법 B에서는 QR 기반 좌표를 우선 사용,
-# place_pose 수신 실패 등 fallback 용도로만 유지)
+# 포장구역별 로봇팔 플레이싱 좌표 (실측값으로 교체 필요)
 ZONE_TO_PLACE = {
     'A': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
     'B': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
     'C': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
 }
+
+# ===== [신규] 유효 층 목록 (vision_node의 SHELF_POSES 키와 일치해야 함) =====
+VALID_LEVELS = {1, 2}
+DEFAULT_LEVEL = 1
 
 
 class BrainNode(Node):
@@ -77,10 +44,11 @@ class BrainNode(Node):
         # Subscribers
         self.create_subscription(String, '/order_request', self._order_callback, 10)
         self.create_subscription(Float32MultiArray, '/box_pose', self._box_pose_callback, 10)
-        self.create_subscription(Float32MultiArray, '/place_pose', self._place_pose_callback, 10)
         self.create_subscription(String, '/pick_status', self._pick_status_callback, 10)
         self.create_subscription(String, '/nav_status', self._nav_status_callback, 10)
         self.create_subscription(String, '/emergency_stop', self._emergency_stop_callback, 10)
+        # ===== [신규] pick_node의 관측 자세 도착 신호 =====
+        self.create_subscription(String, '/observe_ready', self._observe_ready_callback, 10)
 
         # Publishers
         self._vision_activate_pub = self.create_publisher(String, '/vision_activate', 10)
@@ -89,8 +57,12 @@ class BrainNode(Node):
         self._place_target_pub = self.create_publisher(String, '/place_target', 10)
         self._arm_status_pub = self.create_publisher(String, '/arm_status', 10)
         self._go_parking_pub = self.create_publisher(Empty, '/go_parking', 10)
+        # ===== [수정] 기존 self.__pub = create_publisher(String, '/', 10) 는 토픽명이 '/'로 잘못돼 있었음 =====
+        # /wms_update 로 명시적으로 발행하도록 수정
         self._wms_update_pub = self.create_publisher(String, '/wms_update', 10)
         self._brain_state_pub = self.create_publisher(String, '/brain_state', 10)
+        # ===== [신규] 관측 자세 이동 명령 =====
+        self._observe_move_pub = self.create_publisher(String, '/observe_move', 10)
 
         # Internal states
         self.state = 'IDLE'
@@ -98,6 +70,7 @@ class BrainNode(Node):
         self.current_order = None
         self.zone = None
         self.item = None
+        self.level = DEFAULT_LEVEL        # ===== [신규] 현재 주문의 층 =====
         self.emergency_active = False
 
         self.get_logger().info('brain_node 시작 - 상태: IDLE')
@@ -119,17 +92,28 @@ class BrainNode(Node):
 
     def _parse_order(self, order):
         """
-        주문 형식: "물품:구역"  예) "red_triangle:A"
+        ===== [변경] 주문 형식: "물품:구역:층"  예) "red_cross:A:1"
+        - 층 생략 시 기본 1층 (하위호환): "red_cross:A"
+        - 구역/층 모두 생략 시: "red_cross" -> zone='A', level=1
         """
         order = order.strip()
-        if ':' in order:
-            item, zone = order.split(':', 1)
-            item = item.strip()
-            zone = zone.upper().strip()
-        else:
-            item = order.strip()
-            zone = 'A'
-        return item, zone
+        parts = order.split(':')
+        item = parts[0].strip()
+        zone = parts[1].upper().strip() if len(parts) >= 2 and parts[1].strip() else 'A'
+
+        level = DEFAULT_LEVEL
+        if len(parts) >= 3 and parts[2].strip():
+            try:
+                level = int(parts[2].strip())
+            except ValueError:
+                self.get_logger().warn(f'층 파싱 실패("{parts[2]}") -> 기본 {DEFAULT_LEVEL}층')
+                level = DEFAULT_LEVEL
+
+        if level not in VALID_LEVELS:
+            self.get_logger().warn(f'유효하지 않은 층 {level} -> 기본 {DEFAULT_LEVEL}층')
+            level = DEFAULT_LEVEL
+
+        return item, zone, level
 
     def _start_next_order(self):
         if self.emergency_active:
@@ -140,9 +124,11 @@ class BrainNode(Node):
             return
 
         self.current_order = self.order_queue.popleft()
-        self.item, self.zone = self._parse_order(self.current_order)
+        # ===== [변경] 층까지 파싱 =====
+        self.item, self.zone, self.level = self._parse_order(self.current_order)
         self.get_logger().info(
-            f'다음 주문 시작: {self.current_order}, item={self.item}, zone={self.zone}'
+            f'다음 주문 시작: {self.current_order}, '
+            f'item={self.item}, zone={self.zone}, level={self.level}'
         )
 
         self.state = 'NAV_TO_RACK'
@@ -154,14 +140,16 @@ class BrainNode(Node):
     def _finish_current_order(self):
         self.get_logger().info(f'현재 주문 완료: {self.current_order}')
 
+        # ===== [수정] 올바른 /wms_update 퍼블리셔 사용 =====
         w_msg = String()
-        w_msg.data = f'{self.item}:{self.zone}:done'   # ← 3개 (label:zone:done)
+        w_msg.data = f'{self.item}:{self.zone}:done'
         self._wms_update_pub.publish(w_msg)
         self.get_logger().info(f'/wms_update 발행: {w_msg.data}')
 
         self.current_order = None
         self.zone = None
         self.item = None
+        self.level = DEFAULT_LEVEL
 
         if self.order_queue:
             self.get_logger().info(
@@ -174,21 +162,6 @@ class BrainNode(Node):
             self._pub_state()
             self._go_parking_pub.publish(Empty())
             self.get_logger().info('/go_parking 발행: Empty')
-
-    def _do_place_with_coords(self, place_data):
-        """
-        주어진 좌표로 PLACING 진입 + /place_command 발행 (공통 처리).
-        place_data: [x, y, z, rx, ry, rz]
-        """
-        self.state = 'PLACING'
-        self._pub_state()
-
-        place_msg = Float32MultiArray()
-        place_msg.data = [float(v) for v in place_data]
-        self._place_command_pub.publish(place_msg)
-        self.get_logger().info(
-            f'/place_command 발행: {[round(v, 1) for v in place_data]}'
-        )
 
     # ============================================================
     # Callbacks
@@ -226,34 +199,6 @@ class BrainNode(Node):
 
         self._pick_command_pub.publish(msg)
         self.get_logger().info('/pick_command 발행')
-
-    def _place_pose_callback(self, msg):
-        """
-        vision_node가 QR을 인식해 계산한 플레이싱 좌표 수신.
-        VISION_PLACE 상태에서만 받아 PLACING으로 진입한다.
-        """
-        if self.emergency_active:
-            self.get_logger().warn('/place_pose 수신했지만 비상정지 상태라 무시')
-            return
-
-        self.get_logger().info(f'/place_pose 수신: {list(msg.data)}')
-
-        if self.state != 'VISION_PLACE':
-            self.get_logger().warn(
-                f'현재 상태가 VISION_PLACE가 아니므로 /place_pose 무시. 현재 상태: {self.state}'
-            )
-            return
-
-        if len(msg.data) != 6:
-            self.get_logger().error(
-                f'/place_pose 좌표 6개 필요, 받은 개수: {len(msg.data)} -> ZONE_TO_PLACE fallback'
-            )
-            zone = self.zone if self.zone in ZONE_TO_PLACE else 'A'
-            self._do_place_with_coords(ZONE_TO_PLACE[zone])
-            return
-
-        # QR 기반 좌표로 플레이싱
-        self._do_place_with_coords(list(msg.data))
 
     def _pick_status_callback(self, msg):
         if self.emergency_active:
@@ -306,37 +251,48 @@ class BrainNode(Node):
 
         self.get_logger().info(f'/nav_status 수신: {msg.data}')
 
-        # ---- rack(objects) 도착: arrived_objects 또는 stop_obj ----
-        if msg.data in ('arrived_objects', 'stop_obj'):
+        if msg.data == 'arrived_objects':
             if self.state != 'NAV_TO_RACK':
                 self.get_logger().warn(
-                    f'{msg.data} 수신했지만 현재 상태가 NAV_TO_RACK이 아님: {self.state}'
+                    f'arrived_objects 수신했지만 현재 상태가 NAV_TO_RACK이 아님: {self.state}'
                 )
                 return
 
-            self.state = 'VISION'
+            # ===== [변경] eye-in-hand: 바로 vision 켜지 않고 관측 자세부터 이동 =====
+            # 기존:
+            #   self.state = 'VISION'
+            #   self._publish_string(self._vision_activate_pub, self.item)
+            # 변경: OBSERVING 상태로 가서 pick_node에 관측 자세 이동 명령
+            self.state = 'OBSERVING'
             self._pub_state()
 
-            self._publish_string(self._vision_activate_pub, self.item)
-            self.get_logger().info(f'/vision_activate 발행: {self.item}')
+            self._publish_string(self._observe_move_pub, str(self.level))
+            self.get_logger().info(f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)')
 
-        # ---- QR(구역) 도착: arrived 또는 stop_qr ----
-        # 방법 B: 고정 좌표로 바로 PLACING 하지 않고,
-        #         vision_node에 'qr_place'를 요청해 QR 기반 좌표를 받는다.
-        elif msg.data in ('arrived', 'stop_qr'):
+        elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
-                    f'{msg.data} 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
+                    f'arrived 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
                 )
                 return
 
-            self.state = 'VISION_PLACE'
+            self.state = 'PLACING'
             self._pub_state()
 
-            self._publish_string(self._vision_activate_pub, 'qr_place')
-            self.get_logger().info('/vision_activate 발행: qr_place (QR 기반 플레이싱 좌표 요청)')
+            zone = self.zone if self.zone else 'A'
 
-        # ---- 주차 완료 ----
+            if zone not in ZONE_TO_PLACE:
+                self.get_logger().error(f'ZONE_TO_PLACE에 없는 구역: {zone}')
+                self.state = 'ERROR'
+                self._pub_state()
+                return
+
+            place_msg = Float32MultiArray()
+            place_msg.data = ZONE_TO_PLACE[zone]
+            self._place_command_pub.publish(place_msg)
+
+            self.get_logger().info(f'/place_command 발행: zone={zone}')
+
         elif msg.data == 'parked':
             if self.state != 'GO_PARKING':
                 self.get_logger().warn(
@@ -350,6 +306,7 @@ class BrainNode(Node):
             self.current_order = None
             self.zone = None
             self.item = None
+            self.level = DEFAULT_LEVEL
             self._pub_state()
 
             if self.order_queue:
@@ -358,6 +315,29 @@ class BrainNode(Node):
 
         else:
             self.get_logger().warn(f'알 수 없는 nav_status: {msg.data}')
+
+    # ===== [신규] pick_node가 관측 자세에 도착했을 때 =====
+    def _observe_ready_callback(self, msg):
+        if self.emergency_active:
+            self.get_logger().warn('/observe_ready 수신했지만 비상정지 상태라 무시')
+            return
+
+        if self.state != 'OBSERVING':
+            self.get_logger().warn(
+                f'/observe_ready 수신했지만 현재 상태가 OBSERVING이 아님: {self.state}'
+            )
+            return
+
+        self.get_logger().info(f'/observe_ready 수신: {msg.data} (관측 자세 도착)')
+
+        # 이제 팔이 관측 자세에 있으니 vision 켜기
+        self.state = 'VISION'
+        self._pub_state()
+
+        # "item:level" 포맷으로 발행 -> vision_node가 층별 T_cam2base 선택
+        activate_data = f'{self.item}:{self.level}'
+        self._publish_string(self._vision_activate_pub, activate_data)
+        self.get_logger().info(f'/vision_activate 발행: {activate_data}')
 
     def _emergency_stop_callback(self, msg):
         command = msg.data.strip().lower()
@@ -397,6 +377,7 @@ class BrainNode(Node):
         self.current_order = None
         self.zone = None
         self.item = None
+        self.level = DEFAULT_LEVEL
         self.state = 'IDLE'
         self._pub_state()
 
