@@ -78,8 +78,8 @@ X_CAM2GRIPPER_PATH = "/home/zzz/calibration/X_cam2gripper.npy"
 #   - brain_node는 이동을 send_angles(SHELF_ANGLES[level])로 해야 이 값에 정확히 도달함.
 #   - send_coords로 보내면 IK 복수해 때문에 자세가 A/B로 갈려서 이 값과 어긋남.
 SHELF_POSES = {
-    1: [7.1, -63.8, 236.7, -120.4, -36.0, -71.2],    # 1층 관측 실측
-    2: [-14.0, -64.2, 278.2, -85.9, -40.0, -93.5],   # 2층 관측 실측
+    1: [10.8, -61.6, 228.4, -123.1, -34.2, -66.6],   # 1층 관측 실측 (랙 16.5cm, send_angles+sleep 안정값)
+    2: [-46.8, -59.1, 285.1, -89.3, -40.5, -87.1],   # 2층 관측 실측 (랙 12.5cm, send_angles+sleep 안정값)
 }
 
 # 층별 depth 유효 범위(mm). 관측 높이가 층마다 달라서 분리.
