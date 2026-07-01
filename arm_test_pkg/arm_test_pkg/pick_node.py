@@ -76,11 +76,17 @@ GRIPPER_CLOSE = 30
 #        eye-in-hand에서 반드시 재측정할 것.
 #        측정법: bias 전부 0인 상태에서 블록 하나 파지 시도 ->
 #                그리퍼 끝이 블록보다 얼마나 높이/낮게 멈추는지 보고 조정.
-GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
+#GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
 
 # 기울어진 파지 자세에서 flange↔그리퍼끝 offset (3축 다)
 # 자세각 [-102.25, -38.21, -82.48] 기준 실측
-GRIP_OFFSET = [-54.4, 13.2, 25.5]   # 블록좌표 → flange 목표
+# =========================
+# 파지 offset (3축) - 기울어진 그리퍼라 x,y,z 다 필요
+# 블록좌표 → flange 목표. 자세각 [-102.25,-38.21,-82.48]에서 실측.
+# =========================
+GRIP_OFFSET_X = -54.4
+GRIP_OFFSET_Y = 13.2
+GRIP_OFFSET_Z = 25.5
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 10.0
@@ -325,9 +331,10 @@ class PickNode(Node):
 
             # ===== [변경] 미세보정 — 전부 0 초기화 상태로 단순 적용 =====
             # (기존의 y비례보정 x += abs(y)*0.15, ry += 18 등은 eye-to-hand 땜빵이라 제거)
-            x += PICK_X_BIAS_MM
-            y += PICK_Y_BIAS_MM
-            z += PICK_Z_BIAS_MM
+            x = x + GRIP_OFFSET_X + PICK_X_BIAS_MM
+            y = y + GRIP_OFFSET_Y + PICK_Y_BIAS_MM
+            z = z + GRIP_OFFSET_Z + PICK_Z_BIAS_MM
+
 
             self.get_logger().info(
                 f"피킹 좌표(보정 후): x={x:.1f}, y={y:.1f}, z={z:.1f}, "
@@ -335,7 +342,7 @@ class PickNode(Node):
             )
 
             # 그리퍼 끝이 물체에 닿도록 플랜지 기준 z 보정
-            target_z = z + GRIPPER_Z_OFFSET_MM
+            target_z = z
 
             pre_pick = [x, y, target_z + APPROACH_Z_MM, rx, ry, rz]
             lifted   = [x, y, target_z + LIFT_Z,        rx, ry, rz]
