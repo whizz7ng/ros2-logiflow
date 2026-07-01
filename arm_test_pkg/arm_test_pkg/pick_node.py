@@ -85,7 +85,7 @@ GRIPPER_CLOSE = 30
 # 블록좌표 → flange 목표. 자세각 [-102.25,-38.21,-82.48]에서 실측.
 # =========================
 GRIP_OFFSET_X = -54.4
-GRIP_OFFSET_Y = 2.0
+GRIP_OFFSET_Y = -2.0
 GRIP_OFFSET_Z = 50.5
 
 # 물체 바로 위 waypoint 높이
