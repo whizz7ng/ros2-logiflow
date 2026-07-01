@@ -422,7 +422,7 @@ class PickNode(Node):
             )
 
             self._log("[PLACE 1/6] 놓을 위치 위 waypoint 이동")
-            self.mc.send_coords(pre_place, MOVE_SPEED, 1)
+            self.mc.send_coords(pre_place, MOVE_SPEED, 0)
             if not self._safe_sleep(5.0):
                 return
 
