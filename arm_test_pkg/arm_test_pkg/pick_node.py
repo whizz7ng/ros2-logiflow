@@ -340,8 +340,8 @@ class PickNode(Node):
             if y > 0:
                 y -= y * 0.15
                 #x += abs(y) * 0.1     # x는 y 크기에 비례
-            # elif y < 0:
-            #     y -= y * 0.15
+            elif y < 0:
+                y += y * 0.1
 
             self.get_logger().info(
                 f"피킹 좌표(보정 후): x={x:.1f}, y={y:.1f}, z={z:.1f}, "
