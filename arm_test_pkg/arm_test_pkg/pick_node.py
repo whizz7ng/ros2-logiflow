@@ -79,7 +79,7 @@ GRIPPER_CLOSE = 30
 GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
 
 # 물체 바로 위 waypoint 높이
-APPROACH_Z_MM = 50.0
+APPROACH_Z_MM = 10.0
 
 # =========================
 # [변경] 실제 피킹 미세 보정값 — 전부 0으로 초기화
@@ -93,7 +93,7 @@ PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 
 # 집은 뒤 위로 들어올릴 높이
-LIFT_Z = 40.0
+LIFT_Z = 30.0
 
 # 내려갈 때 속도는 천천히
 DESCEND_SPEED = 8
