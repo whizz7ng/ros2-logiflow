@@ -76,7 +76,7 @@ GRIPPER_CLOSE = 30
 #        eye-in-hand에서 반드시 재측정할 것.
 #        측정법: bias 전부 0인 상태에서 블록 하나 파지 시도 ->
 #                그리퍼 끝이 블록보다 얼마나 높이/낮게 멈추는지 보고 조정.
-#GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
+GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
 
 # 기울어진 파지 자세에서 flange↔그리퍼끝 offset (3축 다)
 # 자세각 [-102.25, -38.21, -82.48] 기준 실측
