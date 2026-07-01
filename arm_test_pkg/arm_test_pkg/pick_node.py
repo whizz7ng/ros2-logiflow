@@ -339,6 +339,7 @@ class PickNode(Node):
             # y < 0(오른쪽)일 때만 비례보정. 정면~왼쪽(y>=0)은 정확해서 건드리지 않음.
             if y < 0:
                 y -= y * 0.1
+                x += x * 0.1
            
 
             self.get_logger().info(
