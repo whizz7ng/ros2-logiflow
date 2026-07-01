@@ -336,7 +336,10 @@ class PickNode(Node):
             z = z + GRIP_OFFSET_Z + PICK_Z_BIAS_MM
 
             # y 비례보정 (정면 x는 정확, y만 비례 오차). 계수는 튜닝.
-            y -= y * 0.1
+            # y < 0(오른쪽)일 때만 비례보정. 정면~왼쪽(y>=0)은 정확해서 건드리지 않음.
+            if y < 0:
+                y -= y * 0.1
+           
 
             self.get_logger().info(
                 f"피킹 좌표(보정 후): x={x:.1f}, y={y:.1f}, z={z:.1f}, "
