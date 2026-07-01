@@ -62,7 +62,7 @@ SHELF_ANGLES = {
 OBSERVE_SETTLE_WAIT = 4.0
 
 # 그리퍼 값
-GRIPPER_OPEN = 100
+GRIPPER_OPEN = 60
 GRIPPER_CLOSE = 30
 
 
@@ -76,7 +76,7 @@ GRIPPER_CLOSE = 30
 #        eye-in-hand에서 반드시 재측정할 것.
 #        측정법: bias 전부 0인 상태에서 블록 하나 파지 시도 ->
 #                그리퍼 끝이 블록보다 얼마나 높이/낮게 멈추는지 보고 조정.
-GRIPPER_Z_OFFSET_MM = 133.0   # TODO: eye-in-hand 재측정
+GRIPPER_Z_OFFSET_MM = .0   # TODO: eye-in-hand 재측정
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 50.0
