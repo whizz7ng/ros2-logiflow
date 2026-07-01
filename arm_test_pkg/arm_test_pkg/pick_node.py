@@ -340,7 +340,7 @@ class PickNode(Node):
             if y > 0:
                 y -= y * 0.15
                 #x += abs(y) * 0.1     # x는 y 크기에 비례
-             if y < 0:
+            if y < 0:
                 y -= y * 0.01
 
             self.get_logger().info(
