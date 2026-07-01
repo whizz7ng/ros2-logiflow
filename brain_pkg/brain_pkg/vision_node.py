@@ -329,7 +329,13 @@ class VisionNode(Node):
             f'  변환된 arm_xyz(mm) L{self.shelf_level}: {[round(v, 1) for v in arm_xyz]}'
         )
 
-        coords = list(arm_xyz) + [-102.25, -38.21, -82.48]
+        GRIP_OFFSET = [-54.4, 13.2, 25.5]
+        flange_xyz = [
+            arm_xyz[0] + GRIP_OFFSET[0],
+            arm_xyz[1] + GRIP_OFFSET[1],
+            arm_xyz[2] + GRIP_OFFSET[2],
+        ]
+        coords = flange_xyz + [-102.25, -38.21, -82.48]
 
         msg = Float32MultiArray()
         msg.data = [float(v) for v in coords]
