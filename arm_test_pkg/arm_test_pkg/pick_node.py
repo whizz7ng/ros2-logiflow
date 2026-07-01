@@ -86,7 +86,7 @@ GRIPPER_CLOSE = 30
 # =========================
 GRIP_OFFSET_X = -54.4
 GRIP_OFFSET_Y = -2.0
-GRIP_OFFSET_Z = 50.5
+GRIP_OFFSET_Z = 50.0
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 10.0
@@ -98,7 +98,7 @@ APPROACH_Z_MM = 10.0
 # 새 eye-in-hand calib 기준으로는 0에서 시작해서 실측으로 다시 잡아야 함.
 # 순수 calib 정확도부터 확인(vision arm_xyz 로그 vs 실제 블록 위치)한 뒤,
 # 빗나가는 만큼만 아래를 채울 것.
-PICK_X_BIAS_MM = 0.0     # 이전: 12.0
+PICK_X_BIAS_MM = 5.0     # 이전: 12.0
 PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 
