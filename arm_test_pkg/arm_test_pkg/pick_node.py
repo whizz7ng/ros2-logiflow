@@ -348,7 +348,7 @@ class PickNode(Node):
 
             # ===== [변경] PICK_READY 단계 삭제. 관측 자세에서 바로 물체 위로 =====
             self._log("[PICK 2/7] 물체 위 waypoint 이동")
-            self.mc.send_coords(pre_pick, MOVE_SPEED, 1)
+            self.mc.send_coords(pre_pick, MOVE_SPEED, 0)
             if not self._safe_sleep(7.0):
                 return
 
