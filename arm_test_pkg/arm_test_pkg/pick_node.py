@@ -93,6 +93,12 @@ GRIP_OFFSET = {
     2: [-54.4, -2.0, 50.0],      # 2층 z만 조정 (위에서 잡히니 낮춰야)
 }
 
+# 층별 파지 자세각 (rx, ry, rz)
+GRIP_POSE = {
+    1: [-155.72, -33.49, -40.93],   # 1층 수그린 자세 (실측)
+    2: [-102.25, -38.21, -82.48],   # 2층 (기존, 잘 됨)
+}
+
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 10.0
 
@@ -398,6 +404,10 @@ class PickNode(Node):
 
             # ===== 관측 자세에서 파지 위치로 바로 (mode 0) =====
             # offset이 반영된 flange 목표 = 블록 딱 잡는 위치. 기울어진 자세라 z 하강 안 함.
+
+            # 층별 파지 자세각으로 덮어쓰기 (vision이 준 rx,ry,rz 대신)
+            rx, ry, rz = GRIP_POSE[self.current_level]
+          
             target = [x, y, target_z, rx, ry, rz]
 
             if self.current_level == 1:
