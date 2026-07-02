@@ -27,7 +27,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray
-
+import numpy as np 
 try:
     from pymycobot import MyCobot
 except ImportError:
@@ -150,6 +150,7 @@ class PickNode(Node):
         self._status_pub = self.create_publisher(String, "/arm/status", 10)
         # ===== [신규] 관측 자세 도착 신호 =====
         self._observe_ready_pub = self.create_publisher(String, "/observe_ready", 10)
+        self._observe_pose_pub = self.create_publisher(Float32MultiArray, "/observe_pose", 10)
 
         # myCobot 연결
         self.get_logger().info("myCobot 연결 시도 중...")
@@ -216,6 +217,20 @@ class PickNode(Node):
             elapsed += step
         return True
 
+    def _safe_get_coords(self, tries=5):
+        """정지 상태에서 여러 번 읽어 중앙값. 이상값/실패 걸러냄."""
+        samples = []
+        for _ in range(tries):
+            c = self.mc.get_coords()
+            if c and c != -1 and len(c) == 6:
+                samples.append(c)
+            time.sleep(0.15)
+        if not samples:
+            return None
+        arr = np.array(samples)               # numpy 필요
+        med = np.median(arr, axis=0)
+        return [float(v) for v in med]
+  
     def _stop_robot_arm(self):
         try:
             self.mc.stop()
@@ -271,6 +286,16 @@ class PickNode(Node):
             self.mc.send_angles(angles, MOVE_SPEED)
             if not self._safe_sleep(OBSERVE_SETTLE_WAIT):
                 return
+
+             # ★ 정지 후 실제 자세 읽어서 발행 (동적 T용) ★
+            pose = self._safe_get_coords()
+            if pose is None:
+                self._log("[OBSERVE] get_coords 실패 - 관측 자세 발행 못 함")
+            else:
+                pm = Float32MultiArray()
+                pm.data = [float(v) for v in pose]
+                self._observe_pose_pub.publish(pm)
+                self._log(f"[OBSERVE] 관측 자세 발행: {[round(v,1) for v in pose]}")
 
             # 도착 신호
             m = String()
