@@ -58,6 +58,9 @@ SHELF_ANGLES = {
     2: [-1.84, 102.12, -113.11, 12.91, 5.0, -41.39],  # 2층 (랙 12.5cm)
 }
 
+# 1층 접은 진입 자세 (J5 돌려서 랙 회피). 진입/탈출 공용.
+SAFE_ENTRY_1F_ANGLES = [8.17, -27.94, -129.37, 126.38, 54.31, -45.87]
+
 # 관측 자세 이동 후 정착 대기(초). 반복도 테스트에서 4초로 안정 확인.
 OBSERVE_SETTLE_WAIT = 4.0
 
@@ -117,6 +120,7 @@ class PickNode(Node):
         self._busy = False
         self._busy_lock = threading.Lock()
         self.emergency_active = False
+        self.current_level = 2   # 현재 관측/파지 중인 층 (observe_move로 갱신)
 
         # 구독자
         self.create_subscription(
@@ -252,7 +256,8 @@ class PickNode(Node):
         try:
             if self.emergency_active:
                 return
-
+              
+            self.current_level = level
             angles = SHELF_ANGLES[level]
             self._log(f"[OBSERVE] {level}층 관측 자세로 이동: angles={angles}")
             self.mc.send_angles(angles, MOVE_SPEED)
@@ -387,25 +392,55 @@ class PickNode(Node):
             # ===== 관측 자세에서 파지 위치로 바로 (mode 0) =====
             # offset이 반영된 flange 목표 = 블록 딱 잡는 위치. 기울어진 자세라 z 하강 안 함.
             target = [x, y, target_z, rx, ry, rz]
-            self._log(f"[PICK 2/3] 파지 위치로 바로 이동: {[round(v,1) for v in target]}")
-            self.mc.send_coords(target, MOVE_SPEED, 0)
-            if not self._safe_sleep(7.0):
-                return
-          
-            self._log("[PICK 4/7] 그리퍼 닫기")
-            self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
-            if not self._safe_sleep(2.5):
-                return
 
-            self._log("[PICK 5/7] z축 상승")
-            self.mc.send_coords(lifted, MOVE_SPEED, 1)
-            if not self._safe_sleep(3.0):
-                return
+            if self.current_level == 1:
+                # ===== 1층: 접은 진입 → 파지 → 접어서 탈출 =====
+                self._log("[1F] 접은 진입 자세로 이동")
+                self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
+                if not self._safe_sleep(4.0):
+                    return
 
-            self._log("[PICK 6/7] 홈포지션 복귀")
-            self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
-            if not self._safe_sleep(4.0):
-                return
+                self._log(f"[1F] 블록 파지 위치로 (J5 펴지며): {[round(v,1) for v in target]}")
+                self.mc.send_coords(target, MOVE_SPEED, 0)
+                if not self._safe_sleep(6.0):
+                    return
+
+                self._log("[1F] 그리퍼 닫기")
+                self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
+                if not self._safe_sleep(2.5):
+                    return
+
+                self._log("[1F] 접은 자세로 탈출 (역순)")
+                self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
+                if not self._safe_sleep(4.0):
+                    return
+
+                self._log("[1F] 홈 복귀")
+                self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                if not self._safe_sleep(4.0):
+                    return
+
+            else:
+                # ===== 2층: 기존 로직 (바로 파지) =====
+                self._log(f"[2F] 파지 위치로 바로 이동: {[round(v,1) for v in target]}")
+                self.mc.send_coords(target, MOVE_SPEED, 0)
+                if not self._safe_sleep(7.0):
+                    return
+
+                self._log("[2F] 그리퍼 닫기")
+                self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
+                if not self._safe_sleep(2.5):
+                    return
+
+                self._log("[2F] z축 상승")
+                self.mc.send_coords(lifted, MOVE_SPEED, 1)
+                if not self._safe_sleep(3.0):
+                    return
+
+                self._log("[2F] 홈포지션 복귀")
+                self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                if not self._safe_sleep(4.0):
+                    return
 
             self._log("[PICK 7/7] 픽 완료")
             self._pub_pick_status("done")
