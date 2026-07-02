@@ -87,9 +87,11 @@ GRIPPER_CLOSE = 30
 # 파지 offset (3축) - 기울어진 그리퍼라 x,y,z 다 필요
 # 블록좌표 → flange 목표. 자세각 [-102.25,-38.21,-82.48]에서 실측.
 # =========================
-GRIP_OFFSET_X = -54.4
-GRIP_OFFSET_Y = -2.0
-GRIP_OFFSET_Z = 50.0
+# 층별 파지 offset (자세가 달라서 offset도 다름)
+GRIP_OFFSET = {
+    1: [-54.4, -2.0, 50.0],    # 1층 (현재 값, 정확)
+    2: [-54.4, -2.0, 15.0],      # 2층 z만 조정 (위에서 잡히니 낮춰야)
+}
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 10.0
@@ -336,9 +338,11 @@ class PickNode(Node):
 
             # ===== [변경] 미세보정 — 전부 0 초기화 상태로 단순 적용 =====
             # (기존의 y비례보정 x += abs(y)*0.15, ry += 18 등은 eye-to-hand 땜빵이라 제거)
-            x = x + GRIP_OFFSET_X + PICK_X_BIAS_MM
-            y = y + GRIP_OFFSET_Y + PICK_Y_BIAS_MM
-            z = z + GRIP_OFFSET_Z + PICK_Z_BIAS_MM
+            # 변경 (층별 offset)
+            off = GRIP_OFFSET[self.current_level]
+            x = x + off[0] + PICK_X_BIAS_MM
+            y = y + off[1] + PICK_Y_BIAS_MM
+            z = z + off[2] + PICK_Z_BIAS_MM
 
             # y 비례보정 (정면 x는 정확, y만 비례 오차). 계수는 튜닝.
             # y < 0(오른쪽)일 때만 비례보정. 정면~왼쪽은 정확해서 건드리지 않음.
