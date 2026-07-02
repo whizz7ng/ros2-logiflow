@@ -517,10 +517,20 @@ class PickNode(Node):
                     return
 
             else:
-                # ===== 2층: 기존 로직 (바로 파지) =====
-                self._log(f"[2F] 파지 위치로 바로 이동: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, MOVE_SPEED, 0)
-                if not self._safe_sleep(7.0):
+                # ===== 2층: 정면 앞 → 전진 → 파지 =====
+                APPROACH_X_2F = 40.0   # 블록 앞 40mm에서 시작 (실측 조정)
+                front = [x - APPROACH_X_2F, y, target_z, rx, ry, rz]
+                self._log(f"[2F] 블록 앞으로: {[round(v,1) for v in front]}")
+                self.mc.send_coords(front, MOVE_SPEED, 0)
+                if not self._safe_sleep(6.0):
+                    return
+
+                # 전진 → 블록 (x만 증가, 쏠림 보정)
+                FORWARD_Y_COMP_2F = 0.0   # 2층 전진 쏠림 보정 (실측, 없으면 0)
+                fwd = [x, y + FORWARD_Y_COMP_2F, target_z, rx, ry, rz]
+                self._log(f"[2F] 전진 파지: {[round(v,1) for v in fwd]}")
+                self.mc.send_coords(fwd, DESCEND_SPEED, 1)   # 직선 전진
+                if not self._safe_sleep(4.0):
                     return
 
                 self._log("[2F] 그리퍼 닫기")
@@ -528,19 +538,19 @@ class PickNode(Node):
                 if not self._safe_sleep(2.5):
                     return
 
+                # 들기
                 self._log("[2F] z축 상승")
                 self.mc.send_coords(lifted, MOVE_SPEED, 1)
                 if not self._safe_sleep(3.0):
                     return
 
-                # ★ 뒤로 빼기 (랙에서 안전하게 후진 후 홈) ★
-                RETREAT_X_2F = 60.0   # 뒤로 뺄 거리(mm), 실측 조정
-                back = [x - RETREAT_X_2F, y, target_z + LIFT_Z, rx, ry, rz]
+                # 뒤로 빼기 (전진 역방향)
+                back = [x - APPROACH_X_2F, y, target_z + LIFT_Z, rx, ry, rz]
                 self._log(f"[2F] 뒤로 빼기: {[round(v,1) for v in back]}")
                 self.mc.send_coords(back, MOVE_SPEED, 0)
                 if not self._safe_sleep(3.0):
                     return
-                               
+
                 self._log("[2F] 홈포지션 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
