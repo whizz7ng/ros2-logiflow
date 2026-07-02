@@ -363,8 +363,8 @@ class PickNode(Node):
                 f"bias=({PICK_X_BIAS_MM}, {PICK_Y_BIAS_MM}, {PICK_Z_BIAS_MM})"
             )
 
-            if self.current_level == 1:
-                ry = ry + 30    # 그리퍼 수그리기 (부호/값 실측)
+            # if self.current_level == 1:
+            #     ry = ry + 30    # 그리퍼 수그리기 (부호/값 실측)
           
             # 그리퍼 끝이 물체에 닿도록 플랜지 기준 z 보정
             target_z = z
