@@ -518,7 +518,7 @@ class PickNode(Node):
 
             else:
                 # ===== 2층: 정면 앞 → 전진 → 파지 =====
-                APPROACH_X_2F = 40.0   # 블록 앞 40mm에서 시작 (실측 조정)
+                APPROACH_X_2F = 60.0   # 블록 앞 40mm에서 시작 (실측 조정)
                 front = [x - APPROACH_X_2F, y, target_z, rx, ry, rz]
                 self._log(f"[2F] 블록 앞으로: {[round(v,1) for v in front]}")
                 self.mc.send_coords(front, MOVE_SPEED, 0)
