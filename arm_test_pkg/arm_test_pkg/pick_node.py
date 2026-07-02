@@ -398,23 +398,38 @@ class PickNode(Node):
             target = [x, y, target_z, rx, ry, rz]
 
             if self.current_level == 1:
-                # ===== 1층: 접은 진입 → 파지 → 접어서 탈출 =====
-                self._log("[1F] 접은 진입 자세로 이동")
+                self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                if not self._safe_sleep(1.5):
+                    return
+
+                # 1. 접은 진입 (랙 회피)
+                self._log("[1F] 접은 진입 자세")
                 self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
                     return
 
-                self._log(f"[1F] 블록 파지 위치로 (J5 펴지며): {[round(v,1) for v in target]}")
+                # 2. J5 펴기 (접힘 해제 → 파지 좋은 관절 상태)
+                self._log("[1F] J5 펴기")
+                unfold = list(SAFE_ENTRY_1F_ANGLES)
+                unfold[4] = 0        # ← 대충 편 값. 안 되면 조정
+                self.mc.send_angles(unfold, MOVE_SPEED)
+                if not self._safe_sleep(3.0):
+                    return
+
+                # 3. 블록으로 (vision 자세각으로 최종 정렬)
+                self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
                 self.mc.send_coords(target, MOVE_SPEED, 0)
                 if not self._safe_sleep(6.0):
                     return
 
+                # 4. 닫기
                 self._log("[1F] 그리퍼 닫기")
                 self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
                 if not self._safe_sleep(2.5):
                     return
 
-                self._log("[1F] 접은 자세로 탈출 (역순)")
+                # 5. 접어서 탈출
+                self._log("[1F] 접어서 탈출")
                 self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
                     return
