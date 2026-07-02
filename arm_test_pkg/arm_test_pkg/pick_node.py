@@ -448,7 +448,7 @@ class PickNode(Node):
                 # 수평 전진 → 블록 (z 고정, x만 증가)
                 target = [x, y, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
+                self.mc.send_coords(target, DESCEND_SPEED, 0)   # mode 1 = 직선 전진
                 if not self._safe_sleep(4.0):
                     return
                   
