@@ -533,6 +533,14 @@ class PickNode(Node):
                 if not self._safe_sleep(3.0):
                     return
 
+                # ★ 뒤로 빼기 (랙에서 안전하게 후진 후 홈) ★
+                RETREAT_X_2F = 60.0   # 뒤로 뺄 거리(mm), 실측 조정
+                back = [x - RETREAT_X_2F, y, target_z + LIFT_Z, rx, ry, rz]
+                self._log(f"[2F] 뒤로 빼기: {[round(v,1) for v in back]}")
+                self.mc.send_coords(back, MOVE_SPEED, 0)
+                if not self._safe_sleep(3.0):
+                    return
+                               
                 self._log("[2F] 홈포지션 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
