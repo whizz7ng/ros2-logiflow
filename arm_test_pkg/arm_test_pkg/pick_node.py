@@ -429,24 +429,41 @@ class PickNode(Node):
                 if not self._safe_sleep(3.0):
                     return
 
-                # 3. 블록으로 (vision 자세각으로 최종 정렬)
-                self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, MOVE_SPEED, 0)
-                if not self._safe_sleep(6.0):
+                #3. ★ 블록 바로 위 (추가) ★
+                above = [x, y, z + APPROACH_Z_MM, rx, ry, rz]
+                self._log(f"[1F] 블록 위로: {[round(v,1) for v in above]}")
+                self.mc.send_coords(above, MOVE_SPEED, 0)
+                self._safe_sleep(5.0)
+                if not self._safe_sleep(4.0):
                     return
 
-                # 4. 닫기
+
+                # # 4. 블록으로 (vision 자세각으로 최종 정렬)
+                # self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
+                # self.mc.send_coords(target, MOVE_SPEED, 0)
+                # if not self._safe_sleep(6.0):
+                #     return
+              
+                # 4. 블록으로 하강
+                target = [x, y, z, rx, ry, rz]
+                self._log(f"[1F] 블록으로 하강: {[round(v,1) for v in target]}")
+                self.mc.send_coords(target, DESCEND_SPEED, 0)
+                if not self._safe_sleep(4.0):
+                    return
+              
+                # 5. 닫기
                 self._log("[1F] 그리퍼 닫기")
                 self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
                 if not self._safe_sleep(2.5):
                     return
 
-                # 5. 접어서 탈출
+                # 6. 접어서 탈출
                 self._log("[1F] 접어서 탈출")
                 self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
                     return
 
+                # 7. 홈으로 복귀
                 self._log("[1F] 홈 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
