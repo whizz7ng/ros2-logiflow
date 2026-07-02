@@ -352,12 +352,19 @@ class PickNode(Node):
 
             # y 비례보정 (정면 x는 정확, y만 비례 오차). 계수는 튜닝.
             # y < 0(오른쪽)일 때만 비례보정. 정면~왼쪽은 정확해서 건드리지 않음.
-            if y > 0:
-                y -= y * 0.15
-                #x += abs(y) * 0.1     # x는 y 크기에 비례
-            elif y < 0:
-                y += y * 0.1
-
+            if self.current_level == 1:
+                # 1층 전용 y보정
+                if y > 0:
+                    y -= y * 0.15      # 1층 왼쪽 계수
+                elif y < 0:
+                    y += y * 0.1      # 1층 오른쪽 계수
+            else:
+                # 2층 (기존)
+                if y > 0:
+                    y -= y * 0.15
+                elif y < 0:
+                    y += y * 0.1
+                  
             self.get_logger().info(
                 f"피킹 좌표(보정 후): x={x:.1f}, y={y:.1f}, z={z:.1f}, "
                 f"bias=({PICK_X_BIAS_MM}, {PICK_Y_BIAS_MM}, {PICK_Z_BIAS_MM})"
@@ -446,7 +453,8 @@ class PickNode(Node):
                     return
                   
                 # 수평 전진 → 블록 (z 고정, x만 증가)
-                target = [x, y, z, rx, ry, rz]
+                FORWARD_Y_COMP = 10.0   # 쏠리는 만큼 (실측)
+                target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
                 self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
                 if not self._safe_sleep(4.0):
@@ -459,11 +467,11 @@ class PickNode(Node):
                 #     return
               
                 # 4. 블록으로 하강
-                target = [x, y, z, rx, ry, rz]
-                self._log(f"[1F] 블록으로 하강: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 1)
-                if not self._safe_sleep(4.0):
-                    return
+                # target = [x, y, z, rx, ry, rz]
+                # self._log(f"[1F] 블록으로 하강: {[round(v,1) for v in target]}")
+                # self.mc.send_coords(target, DESCEND_SPEED, 1)
+                # if not self._safe_sleep(4.0):
+                #     return
               
                 # 5. 닫기
                 self._log("[1F] 그리퍼 닫기")
