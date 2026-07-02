@@ -358,7 +358,7 @@ class PickNode(Node):
             )
 
             if self.current_level == 1:
-                ry = ry + 15    # 그리퍼 수그리기 (부호/값 실측)
+                ry = ry - 15    # 그리퍼 수그리기 (부호/값 실측)
           
             # 그리퍼 끝이 물체에 닿도록 플랜지 기준 z 보정
             target_z = z
