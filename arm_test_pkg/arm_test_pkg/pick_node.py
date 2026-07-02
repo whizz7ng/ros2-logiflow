@@ -447,7 +447,7 @@ class PickNode(Node):
                 # 4. 블록으로 하강
                 target = [x, y, z, rx, ry, rz]
                 self._log(f"[1F] 블록으로 하강: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 0)
+                self.mc.send_coords(target, DESCEND_SPEED, 1)
                 if not self._safe_sleep(4.0):
                     return
               
