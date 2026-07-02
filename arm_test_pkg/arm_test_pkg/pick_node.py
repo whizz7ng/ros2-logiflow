@@ -238,20 +238,7 @@ class PickNode(Node):
             self.get_logger().warn("비상정지 상태라 /observe_move 무시")
             return
           
-        # "?" ?? "?:J1???" ?? (?: "1" ?? "1:15")
-        data = msg.data.strip()
-        j1_offset = 0.0
-        if ':' in data:
-            level_str, off_str = data.split(':', 1)
-            try:
-                j1_offset = float(off_str)
-            except ValueError:
-                j1_offset = 0.0
-        else:
-            level_str = data
-        level_str = msg.data.strip()
-
-      
+         
         try:
             level = int(level_str)
         except ValueError:
@@ -285,16 +272,6 @@ class PickNode(Node):
             self.mc.send_angles(angles, MOVE_SPEED)
             if not self._safe_sleep(OBSERVE_SETTLE_WAIT):
                 return
-
-            # ?? ? ?? ?? ??? ?? (?? T?)
-            pose = self._safe_get_coords()
-            if pose is None:
-                self._log("[OBSERVE] get_coords ?? - ?? ?? ?? ? ?")
-            else:
-                pm = Float32MultiArray()
-                pm.data = [float(v) for v in pose]
-                self._observe_pose_pub.publish(pm)
-                self._log(f"[OBSERVE] ?? ?? ??: {[round(v,1) for v in pose]}")
           
             # 도착 신호
             m = String()
