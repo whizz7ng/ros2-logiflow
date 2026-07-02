@@ -429,15 +429,29 @@ class PickNode(Node):
                 if not self._safe_sleep(3.0):
                     return
 
-                #3. ★ 블록 바로 위 (추가) ★
-                above = [x, y, z + APPROACH_Z_MM, rx, ry, rz]
-                self._log(f"[1F] 블록 위로: {[round(v,1) for v in above]}")
-                self.mc.send_coords(above, MOVE_SPEED, 0)
-                self._safe_sleep(5.0)
+                # #3. ★ 블록 바로 위 (추가) ★
+                # above = [x, y, z + APPROACH_Z_MM, rx, ry, rz]
+                # self._log(f"[1F] 블록 위로: {[round(v,1) for v in above]}")
+                # self.mc.send_coords(above, MOVE_SPEED, 0)
+                # self._safe_sleep(5.0)
+                # if not self._safe_sleep(4.0):
+                #     return
+
+                # 3 블록 앞 (수평 전진 시작점)
+                APPROACH_X_1F = 40.0   # 블록 앞 40mm에서 시작
+                front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
+                self._log(f"[1F] 블록 앞으로: {[round(v,1) for v in front]}")
+                self.mc.send_coords(front, MOVE_SPEED, 0)
+                if not self._safe_sleep(5.0):
+                    return
+                  
+                # 수평 전진 → 블록 (z 고정, x만 증가)
+                target = [x, y, z, rx, ry, rz]
+                self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
+                self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
                 if not self._safe_sleep(4.0):
                     return
-
-
+                  
                 # # 4. 블록으로 (vision 자세각으로 최종 정렬)
                 # self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
                 # self.mc.send_coords(target, MOVE_SPEED, 0)
