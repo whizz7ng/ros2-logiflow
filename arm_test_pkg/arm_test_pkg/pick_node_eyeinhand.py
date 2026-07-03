@@ -513,70 +513,44 @@ class PickNode(Node):
                 if not self._safe_sleep(1.5):
                     return
 
-                # # 1. 접은 진입 (랙 회피)
-                # self._log("[1F] 접은 진입 자세")
-                # self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
-                # if not self._safe_sleep(4.0):
-                #     return
-
-                
+                # 1. 접은 진입 (랙 회피)
+                self._log("[1F] 접은 진입 자세")
+                self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
+                if not self._safe_sleep(4.0):
+                    return
 
                 # 2. J5 펴기 (접힘 해제 → 파지 좋은 관절 상태)
                 self._log("[1F] J5 펴기")
-                unfold = list(SAFE_ENTRY_1F_ANGLES)
-                unfold[4] = 0        # ← 대충 편 값. 안 되면 조정
-                self.mc.send_angles(unfold, MOVE_SPEED)
-                if not self._safe_sleep(3.0):
-                    return
-
-                # 2. J5 펴기
                 unfold = list(SAFE_ENTRY_1F_ANGLES)
                 unfold[4] = 0
                 self.mc.send_angles(unfold, MOVE_SPEED)
                 if not self._safe_sleep(3.0):
                     return
-              
-                # #3. ★ 블록 바로 위 (추가) ★
-                # above = [x, y, z + APPROACH_Z_MM, rx, ry, rz]
-                # self._log(f"[1F] 블록 위로: {[round(v,1) for v in above]}")
-                # self.mc.send_coords(above, MOVE_SPEED, 0)
-                # self._safe_sleep(5.0)
-                # if not self._safe_sleep(4.0):
-                #     return
 
-                # # 3 블록 앞 (수평 전진 시작점)
-                # APPROACH_X_1F = 40.0   # 블록 앞 40mm에서 시작
-                # front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
-                # self._log(f"[1F] 블록 앞으로: {[round(v,1) for v in front]}")
-                # self.mc.send_coords(front, MOVE_SPEED, 0)
-                # if not self._safe_sleep(5.0):
-                #     return
-                  
-                # # 수평 전진 → 블록 (z 고정, x만 증가)
-                # FORWARD_Y_COMP = 0.0   # 쏠리는 만큼 (실측)
-                # target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
-                # self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                # self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
-                # if not self._safe_sleep(4.0):
-                #     return
-
-                # 3. 블록 앞 뒤쪽 (y는 블록, x는 블록보다 많이 뒤, z는 블록 높이)
-                APPROACH_X_1F = 40.0
-                BACK_X = 80.0   # 블록보다 80mm 뒤 (안전하게 뒤에서 시작)
-                approach = [x - BACK_X, y, z, rx, ry, rz]
-                self._log(f"[1F] 블록 앞 접근 (뒤에서): {[round(v,1) for v in approach]}")
-                self.mc.send_coords(approach, MOVE_SPEED, 0)   # mode 0 (여기까진 자유롭게)
-                if not self._safe_sleep(5.0):
+                # 3. 현재 자세 읽기 (J5 편 상태의 좌표)
+                cur = self._safe_get_coords()
+                if cur is None:
+                    self._log("[1F] get_coords 실패 - 안전상 중단")
+                    self._pub_pick_status("error")
                     return
-                
-                # 4. 블록 앞 40mm (x만 전진, z 고정)
+                self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
+
+                # 4. y축 이동 - 블록 y로 정렬 (현재 x,z 유지, y만 블록으로)
+                y_move = [cur[0], y, cur[2], rx, ry, rz]
+                self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
+                self.mc.send_coords(y_move, MOVE_SPEED, 1)   # 직선
+                if not self._safe_sleep(4.0):
+                    return
+
+                # 5. 블록 앞 40mm (x 접근, z를 블록 높이로)
+                APPROACH_X_1F = 40.0
                 front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
                 self._log(f"[1F] 블록 앞 40mm: {[round(v,1) for v in front]}")
                 self.mc.send_coords(front, MOVE_SPEED, 1)   # 직선
                 if not self._safe_sleep(4.0):
                     return
-                  
-                # 5. 수평 전진 파지 (x만)
+
+                # 6. 수평 전진 파지 (x만)
                 FORWARD_Y_COMP = 0.0
                 target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
@@ -584,46 +558,20 @@ class PickNode(Node):
                 if not self._safe_sleep(4.0):
                     return
 
-                # # 5. 수평 전진 파지
-                # target = [x, y, z, rx, ry, rz]
-                # self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                # self.mc.send_coords(target, DESCEND_SPEED, 1)
-                # if not self._safe_sleep(4.0):
-                #      return
-              
-                # # 4. 블록으로 (vision 자세각으로 최종 정렬)
-                # self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
-                # self.mc.send_coords(target, MOVE_SPEED, 0)
-                # if not self._safe_sleep(6.0):
-                #     return
-              
-                # 4. 블록으로 하강
-                # target = [x, y, z, rx, ry, rz]
-                # self._log(f"[1F] 블록으로 하강: {[round(v,1) for v in target]}")
-                # self.mc.send_coords(target, DESCEND_SPEED, 1)
-                # if not self._safe_sleep(4.0):
-                #     return
-              
-                # 5. 닫기
+                # 7. 닫기
                 self._log("[1F] 그리퍼 닫기")
                 self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
                 if not self._safe_sleep(2.5):
                     return
 
-                # 6. 뒤로 곧게 빼기 (고개 안 돌리고, 파지 자세 유지한 채 x만 뒤로)
-                back_1f = [x - 80, y + FORWARD_Y_COMP, z + 20, rx, ry, rz]   # x 80mm 뒤로
+                # 8. 뒤로 곧게 빼기
+                back_1f = [x - 80, y + FORWARD_Y_COMP, z + 20, rx, ry, rz]
                 self._log(f"[1F] 뒤로 빼기: {[round(v,1) for v in back_1f]}")
                 self.mc.send_coords(back_1f, MOVE_SPEED, 0)
                 if not self._safe_sleep(4.0):
                     return
-                
-                # 7. 충분히 빠졌으면 홈 (여기선 고개 돌려도 랙 밖이라 안전)
-                self._log("[1F] 홈 복귀")
-                self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
-                if not self._safe_sleep(4.0):
-                    return
 
-                # 7. 홈으로 복귀
+                # 9. 홈 복귀
                 self._log("[1F] 홈 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
