@@ -101,19 +101,23 @@ MARKER_LENGTH = 0.0365          # 한 변 3.65cm
 MARKER_ID_LEFT  = 0
 MARKER_ID_RIGHT = 1
 
-# 정상 관측 자세(AGV 정상 정차)일 때 두 마커 중심 픽셀 x (실측).
-MARKER_CENTER_REF = {
-    1: 337,   # 1층: (ID0 126 + ID1 548) / 2
-    2: 350,   # 2층: (ID0 190 + ID1 510) / 2
+# 정상 관측 자세(AGV 정상 정차)일 때 각 마커의 기준 픽셀 x (실측).
+# 개별 마커 기준: 보이는 마커가 자기 기준에서 벗어난 만큼 보정 (한쪽만 보여도 됨).
+MARKER_REF_PX = {
+    1: {MARKER_ID_LEFT: 126, MARKER_ID_RIGHT: 548},   # 1층
+    2: {MARKER_ID_LEFT: 190, MARKER_ID_RIGHT: 510},   # 2층
 }
+# J1 픽셀 환산: J1 10도 → 화면 256픽셀 이동 (실측) → 0.039도/픽셀
+# (마커는 블록보다 뒤라 실제론 조금 다르지만, 반복으로 수렴)
+PIXEL_TO_J1 = 10.0 / 256.0      # ≈ 0.0391
+# 부호: J1+ → 마커 오른쪽 이동. 마커가 기준보다 오른쪽(큰값)이면 J1- 로 되돌림.
+J1_SIGN = -1.0
+# J1 보정 한계 (1회 보정량이 이 이상이면 팔로 못 잡음 → AGV 재정차)
+J1_CORRECTION_MAX = 25.0
+# 마커 보정 최대 반복 횟수 (넘으면 AGV 재정차)
+MARKER_REALIGN_MAX = 3
 # 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
 NOT_FOUND_LIMIT = 15
-# J1 픽셀 환산: J1 10도 → 블록 화면 256픽셀 이동 (실측) → 0.039도/픽셀
-PIXEL_TO_J1 = 10.0 / 256.0      # ≈ 0.0391
-# 부호: J1+ → 마커 오른쪽 이동. 중심이 기준보다 오른쪽(큰값)이면 J1- 로 되돌림.
-J1_SIGN = -1.0
-# J1 보정 한계 (이 이상 틀어지면 팔로 못 잡음 → AGV 재정차)
-J1_CORRECTION_MAX = 25.0
 
 
 def _coords_to_matrix(coords):
@@ -141,6 +145,7 @@ class VisionNode(Node):
         self.shelf_level = 1
         self.recent_qr   = deque(maxlen=WINDOW_SIZE)
         self.not_found_count = 0   # 블록 검출 연속 실패 (마커 보정 트리거용)
+        self.realign_count = 0     # 마커 보정 반복 횟수 (한계 넘으면 재정차)
 
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
@@ -255,53 +260,64 @@ class VisionNode(Node):
         return result
 
     def _try_marker_realign(self):
-        """블록 안 보일 때: 마커로 J1 보정량 계산해서 /j1_correction 발행.
-        - 두 마커 중심이 기준에서 벗어난 만큼 J1 보정 (한 번에).
-        - 마커 못 찾거나 보정량이 한계 초과면 realign_fail (AGV 재정차)."""
-        markers = self._detect_markers()
-        has_left = MARKER_ID_LEFT in markers
-        has_right = MARKER_ID_RIGHT in markers
+        """블록 안 보일 때: 개별 마커 기준으로 J1 보정량 계산해서 /j1_correction 발행.
+        - 보이는 마커가 자기 기준 픽셀에서 벗어난 만큼 J1 보정 (한쪽만 보여도 됨).
+        - 양쪽 보이면 두 보정량 평균.
+        - 최대 MARKER_REALIGN_MAX회 반복, 넘으면 realign_fail (AGV 재정차)."""
+        # 반복 한계 체크
+        if self.realign_count >= MARKER_REALIGN_MAX:
+            self.get_logger().error(
+                f'[마커보정] {MARKER_REALIGN_MAX}회 반복해도 못 찾음 → realign_fail (AGV 재정차)'
+            )
+            self._j1_corr_pub.publish(String(data='realign_fail'))
+            self.realign_count = 0
+            return
 
-        if not has_left and not has_right:
-            self.get_logger().warn('[마커보정] 마커 안 보임 → realign_fail (AGV 재정차 필요)')
+        markers = self._detect_markers()
+        ref = MARKER_REF_PX.get(self.shelf_level, {})
+        if not ref:
+            self.get_logger().error(f'[마커보정] 층 {self.shelf_level} 기준 없음')
             self._j1_corr_pub.publish(String(data='realign_fail'))
             return
 
-        # 두 마커 있으면 중심, 하나만 있으면 그거 기준(덜 정확하지만 방향은 나옴)
-        if has_left and has_right:
-            center = (markers[MARKER_ID_LEFT] + markers[MARKER_ID_RIGHT]) / 2.0
-            self.get_logger().info(
-                f'[마커보정] 양쪽 검출 L={markers[MARKER_ID_LEFT]:.0f} '
-                f'R={markers[MARKER_ID_RIGHT]:.0f} 중심={center:.0f}'
-            )
-        elif has_left:
-            center = markers[MARKER_ID_LEFT]
-            self.get_logger().warn(f'[마커보정] 왼쪽만 검출 L={center:.0f} (한쪽만)')
-        else:
-            center = markers[MARKER_ID_RIGHT]
-            self.get_logger().warn(f'[마커보정] 오른쪽만 검출 R={center:.0f} (한쪽만)')
+        # 보이는 마커 각각의 보정량 계산
+        corrections = []
+        seen = []
+        for mid, ref_px in ref.items():
+            if mid in markers:
+                cur_px = markers[mid]
+                offset_px = cur_px - ref_px
+                corr = J1_SIGN * offset_px * PIXEL_TO_J1
+                corrections.append(corr)
+                seen.append(f'ID{mid}(cur={cur_px:.0f} ref={ref_px} off={offset_px:.0f})')
 
-        ref = MARKER_CENTER_REF.get(self.shelf_level, 320)
-        offset_px = center - ref
-        j1_corr = J1_SIGN * offset_px * PIXEL_TO_J1
+        if not corrections:
+            self.get_logger().warn('[마커보정] 마커 안 보임 → realign_fail (AGV 재정차)')
+            self._j1_corr_pub.publish(String(data='realign_fail'))
+            self.realign_count = 0
+            return
 
+        # 양쪽이면 평균, 한쪽이면 그거
+        j1_corr = sum(corrections) / len(corrections)
         self.get_logger().info(
-            f'[마커보정] 중심={center:.0f} 기준={ref} 벗어남={offset_px:.0f}px '
-            f'→ J1보정={j1_corr:.1f}도'
+            f'[마커보정] {len(corrections)}개 검출 [{", ".join(seen)}] → J1보정={j1_corr:.1f}도'
         )
 
         if abs(j1_corr) > J1_CORRECTION_MAX:
             self.get_logger().warn(
                 f'[마커보정] 보정량 {j1_corr:.1f}도 > 한계 {J1_CORRECTION_MAX} '
-                f'→ realign_fail (AGV 재정차 필요)'
+                f'→ realign_fail (AGV 재정차)'
             )
             self._j1_corr_pub.publish(String(data='realign_fail'))
+            self.realign_count = 0
             return
 
-        # "층:보정량" 발행 → pick이 J1 돌려 재관측
+        self.realign_count += 1
         self._j1_corr_pub.publish(String(data=f'{self.shelf_level}:{j1_corr:.2f}'))
-        self.get_logger().info(f'[마커보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f}')
-        # 발행 후 검출 중단 (pick이 재관측+재활성화 해줌)
+        self.get_logger().info(
+            f'[마커보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f} '
+            f'({self.realign_count}/{MARKER_REALIGN_MAX}회째)'
+        )
         self.mode = MODE_IDLE
 
     # ---------- brain 콜백 ----------
@@ -332,6 +348,9 @@ class VisionNode(Node):
             self.shelf_level = level
             self.mode = MODE_BLOCK
             self.not_found_count = 0
+            # 주의: realign_count는 여기서 리셋 안 함.
+            # J1 보정 재관측도 observe_ready→vision_activate로 다시 오는데,
+            # 여기서 리셋하면 3회 제한이 무효화되어 무한루프. 블록 찾을 때만 리셋.
             self.get_logger().info(f'블록 검출 모드 - 타겟: {item}, 층: {level}')
 
     def _state_callback(self, msg: String):
@@ -386,6 +405,7 @@ class VisionNode(Node):
                 self.not_found_count = 0
             return
         self.not_found_count = 0
+        self.realign_count = 0   # 블록 찾음 → 반복 카운터 리셋
 
         x1, y1, x2, y2 = map(int, target_box.xyxy[0])
         cx = (x1 + x2) // 2
