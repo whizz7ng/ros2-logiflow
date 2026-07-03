@@ -538,7 +538,7 @@ class PickNode(Node):
                 # 4. y축 이동 - 블록 y로 정렬 (현재 x,z 유지, y만 블록으로)
                 y_move = [cur[0], y, cur[2], rx, ry, rz]
                 self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
-                self.mc.send_coords(y_move, MOVE_SPEED, 1)   # 직선
+                self.mc.send_coords(y_move, MOVE_SPEED, 0)   # 직선
                 if not self._safe_sleep(4.0):
                     return
 
