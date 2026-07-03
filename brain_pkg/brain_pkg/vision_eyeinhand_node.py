@@ -349,34 +349,32 @@ class VisionNode(Node):
             self._j1_corr_pub.publish(String(data='realign_fail'))
             self.realign_count = 0
             return
-    
+
         offset_px = cx - BLOCK_CENTER_TARGET_X
         j1_corr = BLOCK_J1_SIGN * offset_px * BLOCK_PIXEL_TO_J1
-    
+
         self.get_logger().info(
             f'[블록중심보정] cx={cx}, target={BLOCK_CENTER_TARGET_X}, '
             f'off={offset_px} → J1보정={j1_corr:.1f}도'
         )
 
-    if abs(j1_corr) > BLOCK_CENTER_CORRECTION_MAX:
-        self.get_logger().warn(
-            f'[블록중심보정] 보정량 {j1_corr:.1f}도 > 한계 {BLOCK_CENTER_CORRECTION_MAX} '
-            f'→ realign_fail (AGV 재정차)'
+        if abs(j1_corr) > BLOCK_CENTER_CORRECTION_MAX:
+            self.get_logger().warn(
+                f'[블록중심보정] 보정량 {j1_corr:.1f}도 > 한계 {BLOCK_CENTER_CORRECTION_MAX} '
+                f'→ realign_fail (AGV 재정차)'
+            )
+            self._j1_corr_pub.publish(String(data='realign_fail'))
+            self.realign_count = 0
+            return
+
+        self.realign_count += 1
+        self._j1_corr_pub.publish(String(data=f'{self.shelf_level}:{j1_corr:.2f}'))
+        self.get_logger().info(
+            f'[블록중심보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f} '
+            f'({self.realign_count}/{MARKER_REALIGN_MAX}회째)'
         )
-        self._j1_corr_pub.publish(String(data='realign_fail'))
-        self.realign_count = 0
-        return
 
-    self.realign_count += 1
-    self._j1_corr_pub.publish(String(data=f'{self.shelf_level}:{j1_corr:.2f}'))
-    self.get_logger().info(
-        f'[블록중심보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f} '
-        f'({self.realign_count}/{MARKER_REALIGN_MAX}회째)'
-    )
-
-    self.mode = MODE_IDLE
-
-  
+        self.mode = MODE_IDLE
 
     # ---------- brain 콜백 ----------
     def _activate_callback(self, msg: String):
@@ -497,6 +495,8 @@ class VisionNode(Node):
                 self._try_marker_realign()
                 self.cut_count = 0
               
+            return
+
         # bbox가 잘리진 않았음
         self.cut_count = 0
         
@@ -518,7 +518,7 @@ class VisionNode(Node):
                 self._try_block_center_realign(cx)
                 self.center_miss_count = 0
         
-            retur
+            return
 
         # 여기까지 왔다는 건 bbox가 정상적으로 화면 안에 들어왔다는 뜻
         self.cut_count = 0
