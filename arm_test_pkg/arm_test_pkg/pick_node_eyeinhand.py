@@ -598,7 +598,7 @@ class PickNode(Node):
                     return
 
                 # 전진 → 블록 (x만 증가, 쏠림 보정)
-                FORWARD_Y_COMP_2F = 10.0   # 2층 전진 쏠림 보정 (실측, 없으면 0)
+                FORWARD_Y_COMP_2F = 0.0   # 2층 전진 쏠림 보정 (실측, 없으면 0)
                 fwd = [x, y + FORWARD_Y_COMP_2F, target_z, rx, ry, rz]
                 self._log(f"[2F] 전진 파지: {[round(v,1) for v in fwd]}")
                 self.mc.send_coords(fwd, DESCEND_SPEED, 1)   # 직선 전진
