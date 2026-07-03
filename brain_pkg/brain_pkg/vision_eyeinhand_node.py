@@ -129,6 +129,7 @@ BLOCK_CENTER_TARGET_X = 320
 BLOCK_PIXEL_TO_J1 = 10.0 / 256.0
 BLOCK_J1_SIGN = -1.0
 BLOCK_CENTER_CORRECTION_MAX = 20.0
+BLOCK_CENTER_REALIGN_MAX = 1
 
 
 def _coords_to_matrix(coords):
@@ -341,9 +342,9 @@ class VisionNode(Node):
         블록은 보이지만 화면 중앙에서 많이 벗어난 경우,
         블록 중심 cx 기준으로 J1 보정량 계산해서 /j1_correction 발행.
         """
-        if self.realign_count >= MARKER_REALIGN_MAX:
+        if self.realign_count >= BLOCK_CENTER_REALIGN_MAX:
             self.get_logger().error(
-                f'[블록중심보정] {MARKER_REALIGN_MAX}회 반복해도 중앙 정렬 실패 '
+                f'[블록중심보정] {BLOCK_CENTER_REALIGN_MAX}회 보정 후에도 중앙 정렬 실패 '
                 f'→ realign_fail (AGV 재정차)'
             )
             self._j1_corr_pub.publish(String(data='realign_fail'))
@@ -371,7 +372,7 @@ class VisionNode(Node):
         self._j1_corr_pub.publish(String(data=f'{self.shelf_level}:{j1_corr:.2f}'))
         self.get_logger().info(
             f'[블록중심보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f} '
-            f'({self.realign_count}/{MARKER_REALIGN_MAX}회째)'
+            f'({self.realign_count}/{BLOCK_CENTER_REALIGN_MAX}회째)'
         )
 
         self.mode = MODE_IDLE
