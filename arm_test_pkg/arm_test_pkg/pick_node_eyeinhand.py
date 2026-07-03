@@ -443,7 +443,7 @@ class PickNode(Node):
             else:
                 # 2층 (기존)
                 if y > 0:
-                    y -= y * 0.14
+                    y -= y * 0.15
                 elif y < 0:
                     y += y * 0.03
                   
