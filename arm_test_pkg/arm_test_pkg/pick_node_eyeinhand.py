@@ -584,12 +584,12 @@ class PickNode(Node):
                 if not self._safe_sleep(4.0):
                     return
 
-                # 5. 수평 전진 파지
-                target = [x, y, z, rx, ry, rz]
-                self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 1)
-                if not self._safe_sleep(4.0):
-                     return
+                # # 5. 수평 전진 파지
+                # target = [x, y, z, rx, ry, rz]
+                # self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
+                # self.mc.send_coords(target, DESCEND_SPEED, 1)
+                # if not self._safe_sleep(4.0):
+                #      return
               
                 # # 4. 블록으로 (vision 자세각으로 최종 정렬)
                 # self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
