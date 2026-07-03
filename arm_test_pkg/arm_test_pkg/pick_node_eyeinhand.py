@@ -345,9 +345,9 @@ class PickNode(Node):
         else:
             self.get_logger().warn(f"알 수 없는 emergency_stop 명령: {msg.data}")
           
-          
-     def _j1_correction_callback(self, msg: String):
-        """vision이 마커로 계산한 J1 보정량 수신 → J1 돌려서 재관측."""
+    def _j1_correction_callback(self, msg: String):
+        """vision이 마커로 계산한 J1 보정량 수신 → J1 돌려서 재관측.
+        재관측 후 observe_ready 발행 → brain이 자동으로 vision 재활성화."""
         if self.emergency_active:
             return
         data = msg.data.strip()
