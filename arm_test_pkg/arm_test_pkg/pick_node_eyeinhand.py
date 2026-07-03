@@ -99,6 +99,15 @@ GRIP_POSE = {
     1: [-145.47, -28.92, -53.1],   # 1층 수그린 자세 (실측)
     2: [-102.25, -38.21, -82.48],   # 2층 (기존, 잘 됨)
 }
+# 2층: 차량/블록이 좌우로 치우친 경우 그리퍼 손목(RZ) 미세 보정
+# y가 클수록 rz를 조금 돌림. 너무 많이 돌지 않도록 ±8도로 제한.
+
+if self.current_level == 2:
+    rz_corr = max(-8.0, min(8.0, y * 0.05))
+    rz += rz_corr
+    self.get_logger().info(
+        f"[RZ 보정] y={y:.1f} → rz_corr={rz_corr:.1f}, final_rz={rz:.1f}"
+    )
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 30.0
