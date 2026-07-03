@@ -119,7 +119,7 @@ MARKER_REALIGN_MAX = 1
 # 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
 NOT_FOUND_LIMIT = 15
 
-===== [블록 중심 보정] =====
+#===== [블록 중심 보정] =====
 bbox가 잘리진 않았지만 블록 중심이 화면 중앙에서 많이 벗어나면 J1 보정
 BLOCK_CENTER_MIN_X = 220
 BLOCK_CENTER_MAX_X = 420
