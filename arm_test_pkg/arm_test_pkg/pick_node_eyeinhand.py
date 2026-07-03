@@ -513,11 +513,13 @@ class PickNode(Node):
                 if not self._safe_sleep(1.5):
                     return
 
-                # 1. 접은 진입 (랙 회피)
-                self._log("[1F] 접은 진입 자세")
-                self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
-                if not self._safe_sleep(4.0):
-                    return
+                # # 1. 접은 진입 (랙 회피)
+                # self._log("[1F] 접은 진입 자세")
+                # self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
+                # if not self._safe_sleep(4.0):
+                #     return
+
+                
 
                 # 2. J5 펴기 (접힘 해제 → 파지 좋은 관절 상태)
                 self._log("[1F] J5 펴기")
@@ -527,6 +529,13 @@ class PickNode(Node):
                 if not self._safe_sleep(3.0):
                     return
 
+                # 2. J5 펴기
+                unfold = list(SAFE_ENTRY_1F_ANGLES)
+                unfold[4] = 0
+                self.mc.send_angles(unfold, MOVE_SPEED)
+                if not self._safe_sleep(3.0):
+                    return
+              
                 # #3. ★ 블록 바로 위 (추가) ★
                 # above = [x, y, z + APPROACH_Z_MM, rx, ry, rz]
                 # self._log(f"[1F] 블록 위로: {[round(v,1) for v in above]}")
@@ -551,20 +560,16 @@ class PickNode(Node):
                 # if not self._safe_sleep(4.0):
                 #     return
 
-                # 3. y축 이동 - 블록의 y 위치로 (J5 편 높이/x 유지한 채 y만)
-                #    J5 편 자세의 현재 좌표를 읽어서 y만 블록 y로 바꿈
-                cur = self._safe_get_coords()
-                if cur is None:
-                    self._log("[1F] get_coords 실패 - y이동 스킵")
-                    cur = [x - APPROACH_X_1F - 60, y, z, rx, ry, rz]  # 폴백
-                y_move = [cur[0], y, cur[2], rx, ry, rz]   # x,z는 현재 유지, y만 블록 y
-                self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
-                self.mc.send_coords(y_move, MOVE_SPEED, 1)   # 직선
-                if not self._safe_sleep(4.0):
+                # 3. 블록 앞 뒤쪽 (y는 블록, x는 블록보다 많이 뒤, z는 블록 높이)
+                APPROACH_X_1F = 40.0
+                BACK_X = 80.0   # 블록보다 80mm 뒤 (안전하게 뒤에서 시작)
+                approach = [x - BACK_X, y, z, rx, ry, rz]
+                self._log(f"[1F] 블록 앞 접근 (뒤에서): {[round(v,1) for v in approach]}")
+                self.mc.send_coords(approach, MOVE_SPEED, 0)   # mode 0 (여기까진 자유롭게)
+                if not self._safe_sleep(5.0):
                     return
                 
-                # 4. 블록 앞 40mm (x 접근, z를 블록 높이로)
-                APPROACH_X_1F = 40.0
+                # 4. 블록 앞 40mm (x만 전진, z 고정)
                 front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
                 self._log(f"[1F] 블록 앞 40mm: {[round(v,1) for v in front]}")
                 self.mc.send_coords(front, MOVE_SPEED, 1)   # 직선
@@ -578,6 +583,13 @@ class PickNode(Node):
                 self.mc.send_coords(target, DESCEND_SPEED, 1)
                 if not self._safe_sleep(4.0):
                     return
+
+                # 5. 수평 전진 파지
+                target = [x, y, z, rx, ry, rz]
+                self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
+                self.mc.send_coords(target, DESCEND_SPEED, 1)
+                        if not self._safe_sleep(4.0):
+                            return
               
                 # # 4. 블록으로 (vision 자세각으로 최종 정렬)
                 # self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
