@@ -443,7 +443,7 @@ class PickNode(Node):
             else:
                 # 2층 (기존)
                 if y > 0:
-                    y -= y * 0.14
+                    y -= y * 0.15
                 elif y < 0:
                     y += y * 0.03
                   
@@ -543,7 +543,7 @@ class PickNode(Node):
                     return
                   
                 # 수평 전진 → 블록 (z 고정, x만 증가)
-                FORWARD_Y_COMP = 10.0   # 쏠리는 만큼 (실측)
+                FORWARD_Y_COMP = 0.0   # 쏠리는 만큼 (실측)
                 target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
                 self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
