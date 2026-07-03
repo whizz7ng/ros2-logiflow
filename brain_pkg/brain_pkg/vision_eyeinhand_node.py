@@ -337,26 +337,26 @@ class VisionNode(Node):
   
 
     def _try_block_center_realign(self, cx):
-    """
-    블록은 보이지만 화면 중앙에서 많이 벗어난 경우,
-    블록 중심 cx 기준으로 J1 보정량 계산해서 /j1_correction 발행.
-    """
-    if self.realign_count >= MARKER_REALIGN_MAX:
-        self.get_logger().error(
-            f'[블록중심보정] {MARKER_REALIGN_MAX}회 반복해도 중앙 정렬 실패 '
-            f'→ realign_fail (AGV 재정차)'
+        """
+        블록은 보이지만 화면 중앙에서 많이 벗어난 경우,
+        블록 중심 cx 기준으로 J1 보정량 계산해서 /j1_correction 발행.
+        """
+        if self.realign_count >= MARKER_REALIGN_MAX:
+            self.get_logger().error(
+                f'[블록중심보정] {MARKER_REALIGN_MAX}회 반복해도 중앙 정렬 실패 '
+                f'→ realign_fail (AGV 재정차)'
+            )
+            self._j1_corr_pub.publish(String(data='realign_fail'))
+            self.realign_count = 0
+            return
+    
+        offset_px = cx - BLOCK_CENTER_TARGET_X
+        j1_corr = BLOCK_J1_SIGN * offset_px * BLOCK_PIXEL_TO_J1
+    
+        self.get_logger().info(
+            f'[블록중심보정] cx={cx}, target={BLOCK_CENTER_TARGET_X}, '
+            f'off={offset_px} → J1보정={j1_corr:.1f}도'
         )
-        self._j1_corr_pub.publish(String(data='realign_fail'))
-        self.realign_count = 0
-        return
-
-    offset_px = cx - BLOCK_CENTER_TARGET_X
-    j1_corr = BLOCK_J1_SIGN * offset_px * BLOCK_PIXEL_TO_J1
-
-    self.get_logger().info(
-        f'[블록중심보정] cx={cx}, target={BLOCK_CENTER_TARGET_X}, '
-        f'off={offset_px} → J1보정={j1_corr:.1f}도'
-    )
 
     if abs(j1_corr) > BLOCK_CENTER_CORRECTION_MAX:
         self.get_logger().warn(
