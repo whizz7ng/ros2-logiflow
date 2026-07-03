@@ -260,9 +260,17 @@ class VisionNode(Node):
         # 잘림 감지
         H, W = img.shape[:2]
         margin = 5
-        if x1 <= margin or y1 <= margin or x2 >= W - margin or y2 >= H - margin:
-            self.get_logger().warn(f'{self.target_item} 잘림 감지 - 픽업 보류, 재정렬 필요')
+      
+        if x1 <= margin or y1 <= margin or x2 >= W - margin:
+            self.not_found_count += 1
+            self.get_logger().warn(
+                f'{self.target_item} 잘림 감지 ({self.not_found_count}/{NOT_FOUND_LIMIT}) - 재정렬 필요'
+            )
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+            if self.not_found_count >= NOT_FOUND_LIMIT:
+                self.get_logger().warn('→ 마커 J1 보정 시도 (잘림)')
+                self._try_marker_realign()
+                self.not_found_count = 0
             return
 
         # ===== [변경] depth 범위를 층별로 사용 =====
