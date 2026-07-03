@@ -504,6 +504,13 @@ class PickNode(Node):
                 if not self._safe_sleep(2.5):
                     return
 
+                # 5.5 살짝 들기 (블록 랙 스침 방지)
+                lift_1f = [x, y + FORWARD_Y_COMP, z + 35, rx, ry, rz]   # z 30mm 위
+                self._log(f"[1F] 살짝 들기: {[round(v,1) for v in lift_1f]}")
+                self.mc.send_coords(lift_1f, MOVE_SPEED, 1)
+                if not self._safe_sleep(2.5):
+                    return
+
                 # 6. 접어서 탈출
                 self._log("[1F] 접어서 탈출")
                 self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
