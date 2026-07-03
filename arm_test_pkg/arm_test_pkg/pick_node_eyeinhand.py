@@ -538,20 +538,22 @@ class PickNode(Node):
                 if not self._safe_sleep(2.5):
                     return
 
-                # 들기
-                self._log("[2F] z축 상승")
+                # 1. z 상승 (제자리에서 위로)
+                self._log("[2F] z 상승")
+                lifted = [x, y, target_z + LIFT_Z, rx, ry, rz]
                 self.mc.send_coords(lifted, MOVE_SPEED, 1)
                 if not self._safe_sleep(3.0):
                     return
-
-                # 뒤로 빼기 (전진 역방향)
+                
+                # 2. 뒤로 빼기 (들린 높이 유지, x 뒤로)
+                self._log("[2F] 뒤로 빼기")
                 back = [x - APPROACH_X_2F, y, target_z + LIFT_Z, rx, ry, rz]
-                self._log(f"[2F] 뒤로 빼기: {[round(v,1) for v in back]}")
                 self.mc.send_coords(back, MOVE_SPEED, 0)
                 if not self._safe_sleep(3.0):
                     return
-
-                self._log("[2F] 홈포지션 복귀")
+                
+                # 3. 홈
+                self._log("[2F] 홈 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
                 if not self._safe_sleep(4.0):
                     return
