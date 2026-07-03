@@ -115,12 +115,12 @@ J1_SIGN = -1.0
 # J1 보정 한계 (1회 보정량이 이 이상이면 팔로 못 잡음 → AGV 재정차)
 J1_CORRECTION_MAX = 25.0
 # 마커 보정 최대 반복 횟수 (넘으면 AGV 재정차)
-MARKER_REALIGN_MAX = 3
+MARKER_REALIGN_MAX = 1
 # 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
 NOT_FOUND_LIMIT = 15
 
-# ===== [블록 중심 보정] =====
-# bbox가 잘리진 않았지만 블록 중심이 화면 중앙에서 많이 벗어나면 J1 보정
+===== [블록 중심 보정] =====
+bbox가 잘리진 않았지만 블록 중심이 화면 중앙에서 많이 벗어나면 J1 보정
 BLOCK_CENTER_MIN_X = 220
 BLOCK_CENTER_MAX_X = 420
 
@@ -498,28 +498,28 @@ class VisionNode(Node):
               
             return
 
-        # bbox가 잘리진 않았음
-        self.cut_count = 0
+        # # bbox가 잘리진 않았음
+        # self.cut_count = 0
         
-        # ===== [블록 중심 보정] =====
-        # 잘리진 않았지만 블록 중심이 너무 좌/우로 치우치면 좌표 발행하지 않고 J1 보정
-        if cx < BLOCK_CENTER_MIN_X or cx > BLOCK_CENTER_MAX_X:
-            self.center_miss_count += 1
+        # # ===== [블록 중심 보정] =====
+        # # 잘리진 않았지만 블록 중심이 너무 좌/우로 치우치면 좌표 발행하지 않고 J1 보정
+        # if cx < BLOCK_CENTER_MIN_X or cx > BLOCK_CENTER_MAX_X:
+        #     self.center_miss_count += 1
         
-            self.get_logger().warn(
-                f'{self.target_item} 중심 치우침 감지 '
-                f'cx={cx} 허용범위=({BLOCK_CENTER_MIN_X}~{BLOCK_CENTER_MAX_X}) '
-                f'({self.center_miss_count}/{NOT_FOUND_LIMIT}) - 블록 중심 보정 필요'
-            )
+        #     self.get_logger().warn(
+        #         f'{self.target_item} 중심 치우침 감지 '
+        #         f'cx={cx} 허용범위=({BLOCK_CENTER_MIN_X}~{BLOCK_CENTER_MAX_X}) '
+        #         f'({self.center_miss_count}/{NOT_FOUND_LIMIT}) - 블록 중심 보정 필요'
+        #     )
         
-            self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+        #     self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
         
-            if self.center_miss_count >= NOT_FOUND_LIMIT:
-                self.get_logger().warn('→ 블록 중심 J1 보정 시도')
-                self._try_block_center_realign(cx)
-                self.center_miss_count = 0
+        #     if self.center_miss_count >= NOT_FOUND_LIMIT:
+        #         self.get_logger().warn('→ 블록 중심 J1 보정 시도')
+        #         self._try_block_center_realign(cx)
+        #         self.center_miss_count = 0
         
-            return
+        #     return
 
         # 여기까지 왔다는 건 bbox가 정상적으로 화면 안에 들어왔다는 뜻
         self.cut_count = 0
