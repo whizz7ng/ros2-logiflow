@@ -535,22 +535,50 @@ class PickNode(Node):
                 # if not self._safe_sleep(4.0):
                 #     return
 
-                # 3 블록 앞 (수평 전진 시작점)
-                APPROACH_X_1F = 40.0   # 블록 앞 40mm에서 시작
-                front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
-                self._log(f"[1F] 블록 앞으로: {[round(v,1) for v in front]}")
-                self.mc.send_coords(front, MOVE_SPEED, 1)
-                if not self._safe_sleep(5.0):
-                    return
+                # # 3 블록 앞 (수평 전진 시작점)
+                # APPROACH_X_1F = 40.0   # 블록 앞 40mm에서 시작
+                # front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
+                # self._log(f"[1F] 블록 앞으로: {[round(v,1) for v in front]}")
+                # self.mc.send_coords(front, MOVE_SPEED, 0)
+                # if not self._safe_sleep(5.0):
+                #     return
                   
-                # 수평 전진 → 블록 (z 고정, x만 증가)
-                FORWARD_Y_COMP = 0.0   # 쏠리는 만큼 (실측)
-                target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
-                self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
+                # # 수평 전진 → 블록 (z 고정, x만 증가)
+                # FORWARD_Y_COMP = 0.0   # 쏠리는 만큼 (실측)
+                # target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
+                # self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
+                # self.mc.send_coords(target, DESCEND_SPEED, 1)   # mode 1 = 직선 전진
+                # if not self._safe_sleep(4.0):
+                #     return
+
+                # 3. y축 이동 - 블록의 y 위치로 (J5 편 높이/x 유지한 채 y만)
+                #    J5 편 자세의 현재 좌표를 읽어서 y만 블록 y로 바꿈
+                cur = self._safe_get_coords()
+                if cur is None:
+                    self._log("[1F] get_coords 실패 - y이동 스킵")
+                    cur = [x - APPROACH_X_1F - 60, y, z, rx, ry, rz]  # 폴백
+                y_move = [cur[0], y, cur[2], rx, ry, rz]   # x,z는 현재 유지, y만 블록 y
+                self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
+                self.mc.send_coords(y_move, MOVE_SPEED, 1)   # 직선
+                if not self._safe_sleep(4.0):
+                    return
+                
+                # 4. 블록 앞 40mm (x 접근, z를 블록 높이로)
+                APPROACH_X_1F = 40.0
+                front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
+                self._log(f"[1F] 블록 앞 40mm: {[round(v,1) for v in front]}")
+                self.mc.send_coords(front, MOVE_SPEED, 1)   # 직선
                 if not self._safe_sleep(4.0):
                     return
                   
+                # 5. 수평 전진 파지 (x만)
+                FORWARD_Y_COMP = 0.0
+                target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
+                self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
+                self.mc.send_coords(target, DESCEND_SPEED, 1)
+                if not self._safe_sleep(4.0):
+                    return
+              
                 # # 4. 블록으로 (vision 자세각으로 최종 정렬)
                 # self._log(f"[1F] 블록으로: {[round(v,1) for v in target]}")
                 # self.mc.send_coords(target, MOVE_SPEED, 0)
