@@ -497,12 +497,12 @@ class PickNode(Node):
             # 층별 파지 자세각으로 덮어쓰기 (vision이 준 rx,ry,rz 대신)
             rx, ry, rz = GRIP_POSE[self.current_level]
 
-            # if self.current_level == 2:
-            #     rz_corr = max(-10.0, min(10.0, y * 0.07))
-            #     rz += rz_corr
-            #     self.get_logger().info(
-            #         f"[RZ 보정] y={y:.1f} → rz_corr={rz_corr:.1f}, final_rz={rz:.1f}"
-            #     )
+            if self.current_level == 2:
+                rz_corr = max(-10.0, min(10.0, y * 0.07))
+                rz += rz_corr
+                self.get_logger().info(
+                    f"[RZ 보정] y={y:.1f} → rz_corr={rz_corr:.1f}, final_rz={rz:.1f}"
+                )
 
           
             target = [x, y, target_z, rx, ry, rz]
@@ -601,7 +601,7 @@ class PickNode(Node):
                 FORWARD_Y_COMP_2F = 0.0   # 2층 전진 쏠림 보정 (실측, 없으면 0)
                 fwd = [x, y + FORWARD_Y_COMP_2F, target_z, rx, ry, rz]
                 self._log(f"[2F] 전진 파지: {[round(v,1) for v in fwd]}")
-                self.mc.send_coords(fwd, DESCEND_SPEED, 0)   # 직선 전진
+                self.mc.send_coords(fwd, DESCEND_SPEED, 1)   # 직선 전진
                 if not self._safe_sleep(4.0):
                     return
 
