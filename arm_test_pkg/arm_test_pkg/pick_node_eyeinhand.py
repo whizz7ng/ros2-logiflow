@@ -497,12 +497,12 @@ class PickNode(Node):
             # 층별 파지 자세각으로 덮어쓰기 (vision이 준 rx,ry,rz 대신)
             rx, ry, rz = GRIP_POSE[self.current_level]
 
-            if self.current_level == 2:
-                rz_corr = max(-8.0, min(8.0, y * 0.05))
-                rz += rz_corr
-                self.get_logger().info(
-                    f"[RZ 보정] y={y:.1f} → rz_corr={rz_corr:.1f}, final_rz={rz:.1f}"
-                )
+            # if self.current_level == 2:
+            #     rz_corr = max(-8.0, min(8.0, y * 0.05))
+            #     rz += rz_corr
+            #     self.get_logger().info(
+            #         f"[RZ 보정] y={y:.1f} → rz_corr={rz_corr:.1f}, final_rz={rz:.1f}"
+            #     )
 
           
             target = [x, y, target_z, rx, ry, rz]
