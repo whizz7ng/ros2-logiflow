@@ -119,6 +119,17 @@ MARKER_REALIGN_MAX = 3
 # 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
 NOT_FOUND_LIMIT = 15
 
+# ===== [블록 중심 보정] =====
+# bbox가 잘리진 않았지만 블록 중심이 화면 중앙에서 많이 벗어나면 J1 보정
+BLOCK_CENTER_MIN_X = 220
+BLOCK_CENTER_MAX_X = 420
+
+# 블록 중심 기반 J1 보정 반복 기준
+BLOCK_CENTER_TARGET_X = 320
+BLOCK_PIXEL_TO_J1 = 10.0 / 256.0
+BLOCK_J1_SIGN = -1.0
+BLOCK_CENTER_CORRECTION_MAX = 20.0
+
 
 def _coords_to_matrix(coords):
     """myCobot get_coords [x,y,z(mm), rx,ry,rz(deg)] → 4x4 동차변환.
@@ -147,6 +158,7 @@ class VisionNode(Node):
         self.not_found_count = 0   # YOLO가 타겟을 아예 못 찾은 연속 횟수
         self.cut_count = 0         # bbox가 화면 좌/우/상단에 잘린 연속 횟수
         self.realign_count = 0     # 마커 J1 보정 반복 횟수
+        self.center_miss_count = 0  # 블록 중심이 화면 중앙에서 벗어난 연속 횟수
 
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
@@ -321,6 +333,51 @@ class VisionNode(Node):
         )
         self.mode = MODE_IDLE
 
+
+  
+
+    def _try_block_center_realign(self, cx):
+    """
+    블록은 보이지만 화면 중앙에서 많이 벗어난 경우,
+    블록 중심 cx 기준으로 J1 보정량 계산해서 /j1_correction 발행.
+    """
+    if self.realign_count >= MARKER_REALIGN_MAX:
+        self.get_logger().error(
+            f'[블록중심보정] {MARKER_REALIGN_MAX}회 반복해도 중앙 정렬 실패 '
+            f'→ realign_fail (AGV 재정차)'
+        )
+        self._j1_corr_pub.publish(String(data='realign_fail'))
+        self.realign_count = 0
+        return
+
+    offset_px = cx - BLOCK_CENTER_TARGET_X
+    j1_corr = BLOCK_J1_SIGN * offset_px * BLOCK_PIXEL_TO_J1
+
+    self.get_logger().info(
+        f'[블록중심보정] cx={cx}, target={BLOCK_CENTER_TARGET_X}, '
+        f'off={offset_px} → J1보정={j1_corr:.1f}도'
+    )
+
+    if abs(j1_corr) > BLOCK_CENTER_CORRECTION_MAX:
+        self.get_logger().warn(
+            f'[블록중심보정] 보정량 {j1_corr:.1f}도 > 한계 {BLOCK_CENTER_CORRECTION_MAX} '
+            f'→ realign_fail (AGV 재정차)'
+        )
+        self._j1_corr_pub.publish(String(data='realign_fail'))
+        self.realign_count = 0
+        return
+
+    self.realign_count += 1
+    self._j1_corr_pub.publish(String(data=f'{self.shelf_level}:{j1_corr:.2f}'))
+    self.get_logger().info(
+        f'[블록중심보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f} '
+        f'({self.realign_count}/{MARKER_REALIGN_MAX}회째)'
+    )
+
+    self.mode = MODE_IDLE
+
+  
+
     # ---------- brain 콜백 ----------
     def _activate_callback(self, msg: String):
         data = msg.data.strip()
@@ -350,6 +407,7 @@ class VisionNode(Node):
             self.mode = MODE_BLOCK
             self.not_found_count = 0
             self.cut_count = 0
+            self.center_miss_count = 0
             # 주의: realign_count는 여기서 리셋 안 함.
             # J1 보정 재관측도 observe_ready→vision_activate로 다시 오는데,
             # 여기서 리셋하면 3회 제한이 무효화되어 무한루프. 블록 찾을 때만 리셋.
@@ -438,8 +496,29 @@ class VisionNode(Node):
                 self.get_logger().warn('→ 마커 J1 보정 시도 (잘림)')
                 self._try_marker_realign()
                 self.cut_count = 0
-
-            return
+              
+        # bbox가 잘리진 않았음
+        self.cut_count = 0
+        
+        # ===== [블록 중심 보정] =====
+        # 잘리진 않았지만 블록 중심이 너무 좌/우로 치우치면 좌표 발행하지 않고 J1 보정
+        if cx < BLOCK_CENTER_MIN_X or cx > BLOCK_CENTER_MAX_X:
+            self.center_miss_count += 1
+        
+            self.get_logger().warn(
+                f'{self.target_item} 중심 치우침 감지 '
+                f'cx={cx} 허용범위=({BLOCK_CENTER_MIN_X}~{BLOCK_CENTER_MAX_X}) '
+                f'({self.center_miss_count}/{NOT_FOUND_LIMIT}) - 블록 중심 보정 필요'
+            )
+        
+            self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+        
+            if self.center_miss_count >= NOT_FOUND_LIMIT:
+                self.get_logger().warn('→ 블록 중심 J1 보정 시도')
+                self._try_block_center_realign(cx)
+                self.center_miss_count = 0
+        
+            retur
 
         # 여기까지 왔다는 건 bbox가 정상적으로 화면 안에 들어왔다는 뜻
         self.cut_count = 0
