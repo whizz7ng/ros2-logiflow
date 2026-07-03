@@ -304,6 +304,10 @@ class PickNode(Node):
                 self._observe_pose_pub.publish(pm)
                 self._log(f"[OBSERVE] 관측 자세 발행: {[round(v,1) for v in pose]}")
 
+            # observe_ready 발행 전에 busy를 먼저 풀어야
+            # vision이 바로 /j1_correction을 보내도 pick_node가 무시하지 않음
+            self._finish_task()
+
             # 도착 신호
             m = String()
             m.data = "ready"
