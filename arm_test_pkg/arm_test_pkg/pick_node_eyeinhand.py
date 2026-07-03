@@ -542,13 +542,13 @@ class PickNode(Node):
                 if not self._safe_sleep(4.0):
                     return
 
-                # 5. 블록 앞 40mm (x 접근, z를 블록 높이로)
-                APPROACH_X_1F = 40.0
-                front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
-                self._log(f"[1F] 블록 앞 40mm: {[round(v,1) for v in front]}")
-                self.mc.send_coords(front, MOVE_SPEED, 1)   # 직선
-                if not self._safe_sleep(4.0):
-                    return
+                ## 5. 블록 앞 40mm (x 접근, z를 블록 높이로)
+                # APPROACH_X_1F = 40.0
+                # front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
+                # self._log(f"[1F] 블록 앞 40mm: {[round(v,1) for v in front]}")
+                # self.mc.send_coords(front, MOVE_SPEED, 1)   # 직선
+                # if not self._safe_sleep(4.0):
+                #     return
 
                 # 6. 수평 전진 파지 (x만)
                 FORWARD_Y_COMP = 0.0
