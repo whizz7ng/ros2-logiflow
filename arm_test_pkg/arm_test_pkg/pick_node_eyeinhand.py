@@ -546,8 +546,9 @@ class PickNode(Node):
                     return
                 
                 # 2. 뒤로 빼기 (들린 높이 유지, x 뒤로)
-                self._log("[2F] 뒤로 빼기")
-                back = [x - APPROACH_X_2F, y, target_z + LIFT_Z, rx, ry, rz]
+                # 그 자리에서 60mm 뒤로
+                back = [x - 60, y, target_z + LIFT_Z, rx, ry, rz]
+                self._log(f"[2F] 뒤로 60mm: {[round(v,1) for v in back]}")
                 self.mc.send_coords(back, MOVE_SPEED, 0)
                 if not self._safe_sleep(3.0):
                     return
