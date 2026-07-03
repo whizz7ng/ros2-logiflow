@@ -505,7 +505,7 @@ class PickNode(Node):
                     return
 
                 # 6. 뒤로 곧게 빼기 (고개 안 돌리고, 파지 자세 유지한 채 x만 뒤로)
-                back_1f = [x - 80, y + FORWARD_Y_COMP, z, rx, ry, rz]   # x 80mm 뒤로
+                back_1f = [x - 80, y + FORWARD_Y_COMP, z + 20, rx, ry, rz]   # x 80mm 뒤로
                 self._log(f"[1F] 뒤로 빼기: {[round(v,1) for v in back_1f]}")
                 self.mc.send_coords(back_1f, MOVE_SPEED, 0)
                 if not self._safe_sleep(4.0):
