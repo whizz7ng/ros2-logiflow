@@ -321,20 +321,17 @@ class BrainNode(Node):
         if self.emergency_active:
             self.get_logger().warn('/observe_ready 수신했지만 비상정지 상태라 무시')
             return
-
-        if self.state != 'OBSERVING':
+        # OBSERVING(최초 관측) 또는 VISION(J1 보정 재관측) 둘 다 처리
+        if self.state not in ('OBSERVING', 'VISION'):
             self.get_logger().warn(
-                f'/observe_ready 수신했지만 현재 상태가 OBSERVING이 아님: {self.state}'
+                f'/observe_ready 수신했지만 상태가 OBSERVING/VISION 아님: {self.state}'
             )
             return
-
         self.get_logger().info(f'/observe_ready 수신: {msg.data} (관측 자세 도착)')
-
-        # 이제 팔이 관측 자세에 있으니 vision 켜기
-        self.state = 'VISION'
-        self._pub_state()
-
-        # "item:level" 포맷으로 발행 -> vision_node가 층별 T_cam2base 선택
+        # 최초 관측이면 VISION으로 전이, 이미 VISION이면(J1 보정 재관측) 유지
+        if self.state == 'OBSERVING':
+            self.state = 'VISION'
+            self._pub_state()
         activate_data = f'{self.item}:{self.level}'
         self._publish_string(self._vision_activate_pub, activate_data)
         self.get_logger().info(f'/vision_activate 발행: {activate_data}')
