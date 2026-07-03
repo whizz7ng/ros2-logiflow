@@ -294,8 +294,8 @@ class VisionNode(Node):
 
         # 잘림 감지
         H, W = img.shape[:2]
-        margin = 5
-        if x1 <= margin or y1 <= margin or x2 >= W - margin or y2 >= H - margin:
+        margin = 3
+        if x1 <= margin or y1 <= margin or x2 >= W - margin:
             self.get_logger().warn(f'{self.target_item} 잘림 감지 - 픽업 보류, 재정렬 필요')
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             return
