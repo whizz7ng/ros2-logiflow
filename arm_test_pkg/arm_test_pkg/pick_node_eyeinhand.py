@@ -130,6 +130,7 @@ class PickNode(Node):
         self._busy_lock = threading.Lock()
         self.emergency_active = False
         self.current_level = 2   # 현재 관측/파지 중인 층 (observe_move로 갱신)
+        self.j1_offset_by_level = {1: 0.0, 2: 0.0}  # 층별 J1 누적 보정값
 
         # 구독자
         self.create_subscription(
@@ -266,6 +267,8 @@ class PickNode(Node):
         if level not in SHELF_ANGLES:
             self.get_logger().error(f"알 수 없는 층 {level} - 관측 이동 불가")
             return
+          
+        self.j1_offset_by_level[level] = 0.0
 
         # 관측 이동도 하나의 작업이므로 busy 처리 (파지와 중복 방지)
         with self._busy_lock:
@@ -368,15 +371,25 @@ class PickNode(Node):
             self.get_logger().error(f"[J1보정] 파싱 실패: '{data}'")
             return
   
-        self.get_logger().info(f"[J1보정] {level}층 J1 {j1_corr:+.1f}도 보정 재관측")
+        # J1 보정값 누적
+        prev_offset = self.j1_offset_by_level.get(level, 0.0)
+        total_offset = prev_offset + j1_corr
+        self.j1_offset_by_level[level] = total_offset
+        
+        self.get_logger().info(
+            f"[J1보정] {level}층 J1 {j1_corr:+.1f}도 보정, "
+            f"누적 offset={total_offset:+.1f}도 재관측"
+        )
+        
         with self._busy_lock:
             if self._busy:
                 self.get_logger().warn("작업 중 - J1보정 대기")
                 return
             self._busy = True
+        
         threading.Thread(
             target=self._observe_move_sequence,
-            args=(level, j1_corr),      # 기존 J1 오프셋 재관측 재활용
+            args=(level, total_offset),
             daemon=True
         ).start()
 
