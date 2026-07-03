@@ -144,8 +144,9 @@ class VisionNode(Node):
         self.target_item = None
         self.shelf_level = 1
         self.recent_qr   = deque(maxlen=WINDOW_SIZE)
-        self.not_found_count = 0   # 블록 검출 연속 실패 (마커 보정 트리거용)
-        self.realign_count = 0     # 마커 보정 반복 횟수 (한계 넘으면 재정차)
+        self.not_found_count = 0   # YOLO가 타겟을 아예 못 찾은 연속 횟수
+        self.cut_count = 0         # bbox가 화면 좌/우/상단에 잘린 연속 횟수
+        self.realign_count = 0     # 마커 J1 보정 반복 횟수
 
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
@@ -348,6 +349,7 @@ class VisionNode(Node):
             self.shelf_level = level
             self.mode = MODE_BLOCK
             self.not_found_count = 0
+            self.cut_count = 0
             # 주의: realign_count는 여기서 리셋 안 함.
             # J1 보정 재관측도 observe_ready→vision_activate로 다시 오는데,
             # 여기서 리셋하면 3회 제한이 무효화되어 무한루프. 블록 찾을 때만 리셋.
@@ -395,17 +397,21 @@ class VisionNode(Node):
 
         if target_box is None:
             self.not_found_count += 1
+            self.cut_count = 0
+
             self.get_logger().warn(
                 f'{self.target_item} 못 찾음 ({self.not_found_count}/{NOT_FOUND_LIMIT})'
             )
+
             if self.not_found_count >= NOT_FOUND_LIMIT:
-                # 일정 횟수 실패 → 마커로 J1 보정 시도
                 self.get_logger().warn('→ 마커 J1 보정 시도')
                 self._try_marker_realign()
                 self.not_found_count = 0
+
             return
+
+        # 타겟은 찾았으므로 "못 찾음" 카운터만 리셋
         self.not_found_count = 0
-        self.realign_count = 0   # 블록 찾음 → 반복 카운터 리셋
 
         x1, y1, x2, y2 = map(int, target_box.xyxy[0])
         cx = (x1 + x2) // 2
@@ -416,22 +422,28 @@ class VisionNode(Node):
         )
 
         # 잘림 감지 (좌우 + 위. 아래는 관측 자세상 정상이라 제외)
-      
         H, W = img.shape[:2]
         margin = 5
-      
+
         if x1 <= margin or y1 <= margin or x2 >= W - margin:
-            self.not_found_count += 1
+            self.cut_count += 1
+
             self.get_logger().warn(
-                f'{self.target_item} 잘림 감지 ({self.not_found_count}/{NOT_FOUND_LIMIT}) - 재정렬 필요'
+                f'{self.target_item} 잘림 감지 ({self.cut_count}/{NOT_FOUND_LIMIT}) - 재정렬 필요'
             )
+
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
-            if self.not_found_count >= NOT_FOUND_LIMIT:
+
+            if self.cut_count >= NOT_FOUND_LIMIT:
                 self.get_logger().warn('→ 마커 J1 보정 시도 (잘림)')
                 self._try_marker_realign()
-                self.not_found_count = 0
+                self.cut_count = 0
+
             return
 
+        # 여기까지 왔다는 건 bbox가 정상적으로 화면 안에 들어왔다는 뜻
+        self.cut_count = 0
+        self.realign_count = 0
 
         # depth 검출 필터
         dmin, dmax = DEPTH_RANGE.get(self.shelf_level, (110, 300))
