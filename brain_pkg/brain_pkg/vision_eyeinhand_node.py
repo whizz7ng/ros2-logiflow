@@ -1,31 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-vision_node.py  (eye-in-hand / 동적 T 버전)
+vision_node.py  (eye-in-hand / 동적 T + 거리판정 버전)
 
-[동적 T 변경 요약]
-  기존: 층별 고정 관측 포즈(SHELF_POSES)로 T_cam2base를 미리 계산해 재사용.
-        → 관측 자세가 항상 같다는 전제. AGV가 삐뚤게 서면(팔 자세가 달라지면) 어긋남.
-  변경: pick_node가 관측 자세 도착 후 실제 get_coords를 /observe_pose로 발행.
-        vision은 그 실제 자세로 T_cam2base를 "매번" 새로 계산(current_T_cam2base).
-        → 팔을 어느 자세로 옮겨도(스캔 등) 그 시점 자세 기준으로 정확히 변환.
-  폴백: /observe_pose를 아직 못 받았으면 기존 고정 T(SHELF_POSES 기반) 사용.
+[거리 판정 추가]
+  블록 depth(dist_m)가 파지 가능 범위(GRASP_DEPTH_RANGE) 안인지 체크.
+  - 범위 안: 정상 파지 진행 (/box_pose 발행)
+  - 너무 가까움/멈: /distance_status 발행 ("too_close:195" / "too_far:315"),
+    파지 보류. AGV 보정은 별도(nav)에서 이 신호 받아 처리.
+  정상일 때도 "ok:250" 발행해서 nav가 현재 거리 알 수 있게 함.
 
-  X_cam2gripper는 카메라-그리퍼 고정 관계라 안 변함(그대로).
-  T_cam2base = T_gripper2base(실제 팔 자세) @ X_cam2gripper  ← 팔 자세마다 새로.
+[동적 T]
+  pick_node가 관측 자세 도착 후 실제 get_coords를 /observe_pose로 발행.
+  vision은 그 실제 자세로 T_cam2base를 매번 새로 계산(current_T_cam2base).
+  폴백: /observe_pose 못 받았으면 고정 T(SHELF_POSES) 사용.
+  T_cam2base = T_gripper2base(실제 팔 자세) @ X_cam2gripper
 
-[이전 eye-to-hand → eye-in-hand 변경 요약]
-  (1) 고정 T_cam2base npy 로드 삭제 → X_cam2gripper + 관측 포즈로 계산
-  (2) 회전 변환 scipy Rotation 'xyz'(=Rz@Ry@Rx) (ArUco 실측 검증 완료)
-  (3) /vision_activate 포맷: "item:level"
-  (4) depth 유효범위 층별 딕셔너리(DEPTH_RANGE)
-  (5) 관측은 pick_node가 send_angles로 이동(IK 복수해 회피)
-
-전제: realsense2_camera 드라이버가 아래로 먼저 떠 있어야 함
-  ros2 launch realsense2_camera rs_launch.py \
-    enable_color:=true enable_depth:=true \
-    align_depth.enable:=true \
-    rgb_camera.color_profile:=640x480x30
+[eye-in-hand]
+  회전 변환 scipy Rotation 'xyz'(=Rz@Ry@Rx), /vision_activate "item:level",
+  depth 유효범위 층별(DEPTH_RANGE), 관측은 pick이 send_angles로 이동.
 """
 
 from collections import deque
@@ -37,7 +30,6 @@ import numpy as np
 from pyzbar import pyzbar
 from cv_bridge import CvBridge
 
-# ===== eye-in-hand 좌표변환용 scipy =====
 from scipy.spatial.transform import Rotation as R
 
 import rclpy
@@ -78,29 +70,55 @@ CLASS_COLORS = {
     'red_square':    (0, 100, 255),
 }
 
-# ===== eye-in-hand 설정 =====================================
+# ===== eye-in-hand 설정 =====
 X_CAM2GRIPPER_PATH = "/home/zzz/calibration/X_cam2gripper.npy"
 
-# 각 층 관측 포즈의 get_coords 실측값 (mm, deg).
-# [동적 T에서의 역할] 이제 이건 "폴백"용이야.
-#   /observe_pose를 아직 못 받은 상태에서만 이 고정값으로 T를 계산.
-#   정상 흐름에선 pick_node가 보낸 실제 자세(current_T_cam2base)를 씀.
+# 폴백용 관측 포즈 (동적 T 정상 작동 시 안 쓰임)
 SHELF_POSES = {
-    1: [10.8, -61.6, 228.4, -123.1, -34.2, -66.6],   # 1층 관측 실측 (폴백)
-    #2: [-46.8, -59.1, 285.1, -89.3, -40.5, -87.1],   # 2층 관측 실측 (폴백)
-    2: [-5.0, 79.45, -76.81, -13.71, 5.97, -44.2]
+    1: [10.8, -61.6, 228.4, -123.1, -34.2, -66.6],
+    2: [-5.0, 79.45, -76.81, -13.71, 5.97, -44.2],
 }
 
-# 층별 depth 유효 범위(mm).
+# depth 검출 유효 범위(mm) - 노이즈 필터 (넓게)
 DEPTH_RANGE = {
     1: (150, 320),
     2: (150, 360),
 }
 
+# ===== [거리 판정] 파지 가능 depth 범위(mm) =====
+# 블록까지 실제 거리가 이 안이어야 팔이 잡을 수 있음 (실측값).
+# 이 범위 밖이면 AGV가 움직여야 함 → /distance_status 발행.
+GRASP_DEPTH_RANGE = {
+    1: (210, 301),
+    2: (210, 301),
+}
+
+# ===== [마커 J1 보정] =====
+# 블록이 안 보일 때, 좌우 마커(ID0 왼쪽 / ID1 오른쪽)로 AGV 틀어짐을 판단.
+# 두 마커 중심 픽셀이 기준(정상 관측 자세)에서 벗어난 만큼 J1 보정량 계산.
+MARKER_DICT = cv2.aruco.DICT_4X4_50
+MARKER_LENGTH = 0.0365          # 한 변 3.65cm
+MARKER_ID_LEFT  = 0
+MARKER_ID_RIGHT = 1
+
+# 정상 관측 자세(AGV 정상 정차)일 때 두 마커 중심 픽셀 x (실측).
+MARKER_CENTER_REF = {
+    1: 337,   # 1층: (ID0 126 + ID1 548) / 2
+    2: 350,   # 2층: (ID0 190 + ID1 510) / 2
+}
+# 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
+NOT_FOUND_LIMIT = 15
+# J1 픽셀 환산: J1 10도 → 블록 화면 256픽셀 이동 (실측) → 0.039도/픽셀
+PIXEL_TO_J1 = 10.0 / 256.0      # ≈ 0.0391
+# 부호: J1+ → 마커 오른쪽 이동. 중심이 기준보다 오른쪽(큰값)이면 J1- 로 되돌림.
+J1_SIGN = -1.0
+# J1 보정 한계 (이 이상 틀어지면 팔로 못 잡음 → AGV 재정차)
+J1_CORRECTION_MAX = 25.0
+
 
 def _coords_to_matrix(coords):
     """myCobot get_coords [x,y,z(mm), rx,ry,rz(deg)] → 4x4 동차변환.
-    회전은 scipy 'xyz'(extrinsic) = Rz@Ry@Rx. ArUco 마커 실측으로 검증 완료."""
+    회전은 scipy 'xyz'(extrinsic) = Rz@Ry@Rx."""
     x, y, z, rx, ry, rz = coords
     T = np.eye(4, dtype=np.float64)
     T[:3, :3] = R.from_euler("xyz", [rx, ry, rz], degrees=True).as_matrix()
@@ -120,39 +138,47 @@ class VisionNode(Node):
 
         self.mode        = MODE_IDLE
         self.target_item = None
-        self.shelf_level = 1              # 현재 관측 중인 층 (activate로 갱신)
+        self.shelf_level = 1
         self.recent_qr   = deque(maxlen=WINDOW_SIZE)
+        self.not_found_count = 0   # 블록 검출 연속 실패 (마커 보정 트리거용)
 
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
 
-        # ===== eye-in-hand 캘리브레이션 =====
         # X_cam2gripper: 카메라-그리퍼 고정 관계 (안 변함)
         self.X_cam2gripper = np.load(X_CAM2GRIPPER_PATH)
 
-        # 고정 T (폴백용): /observe_pose 못 받았을 때만 사용
+        # 고정 T (폴백용)
         self.T_CAM2BASE = {
             s: _coords_to_matrix(p) @ self.X_cam2gripper
             for s, p in SHELF_POSES.items()
         }
-        # 동적 T: pick_node가 보낸 실제 관측 자세로 매번 갱신
+        # 동적 T
         self.current_T_cam2base = None
+
+        # ArUco 검출기 (마커 J1 보정용)
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(MARKER_DICT)
+        try:
+            self.aruco_params = cv2.aruco.DetectorParameters()
+            self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
+            self._aruco_new = True
+        except AttributeError:
+            self.aruco_params = cv2.aruco.DetectorParameters_create()
+            self._aruco_new = False
 
         self.get_logger().info(
             f'eye-in-hand 캘리브레이션 로드 완료 (폴백 층: {list(self.T_CAM2BASE.keys())})'
         )
         self.get_logger().info(f'YOLO 클래스: {self.model.names}')
 
-        # 구독 - 카메라 토픽
+        # 구독 - 카메라
         self.create_subscription(Image, TOPIC_COLOR, self._color_callback, 10)
         self.create_subscription(Image, TOPIC_DEPTH, self._depth_callback, 10)
         self.create_subscription(CameraInfo, TOPIC_CAMINFO, self._caminfo_callback, 10)
-
         # 구독 - brain
         self.create_subscription(String, '/vision_activate', self._activate_callback, 10)
         self.create_subscription(String, '/brain_state',     self._state_callback,    10)
-
-        # ===== [동적 T] 구독 - pick_node가 보낸 실제 관측 자세 =====
+        # 구독 - pick 관측 자세 (동적 T)
         self.create_subscription(
             Float32MultiArray, '/observe_pose', self._observe_pose_callback, 10
         )
@@ -162,14 +188,16 @@ class VisionNode(Node):
         self._qr_pub             = self.create_publisher(String,            '/depth_qr',       10)
         self._detected_image_pub = self.create_publisher(CompressedImage,   '/detected_image', 10)
         self._place_pose_pub     = self.create_publisher(Float32MultiArray, '/place_pose',     10)
+        # [거리 판정] 발행
+        self._dist_status_pub    = self.create_publisher(String, '/distance_status', 10)
+        # [마커 J1 보정] 발행: "층:J1보정량" (예 "1:8.5"), 또는 "realign_fail"
+        self._j1_corr_pub        = self.create_publisher(String, '/j1_correction', 10)
 
-        self.get_logger().info('vision_node 시작 (eye-in-hand / 동적 T / YOLO 통합)')
+        self.get_logger().info('vision_node 시작 (eye-in-hand / 동적 T / 거리판정)')
 
         self.timer = self.create_timer(0.033, self._process_frame)
 
-    # ----------------------------------------------------------
-    # 카메라 토픽 콜백 - 최신 프레임만 저장
-    # ----------------------------------------------------------
+    # ---------- 카메라 콜백 ----------
     def _color_callback(self, msg: Image):
         self.color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
@@ -185,12 +213,8 @@ class VisionNode(Node):
                 f'intrinsic 수신: fx={fx:.1f} fy={fy:.1f} cx={cx:.1f} cy={cy:.1f}'
             )
 
-    # ----------------------------------------------------------
-    # [동적 T] pick_node 관측 자세 콜백
-    # ----------------------------------------------------------
+    # ---------- 동적 T ----------
     def _observe_pose_callback(self, msg: Float32MultiArray):
-        """pick_node가 보낸 실제 관측 자세(get_coords)로 동적 T_cam2base 갱신.
-        팔이 실제로 도달한 자세 기준이라, AGV가 삐뚤어도 그 자세 기준으로 정확히 변환됨."""
         pose = list(msg.data)
         if len(pose) != 6:
             self.get_logger().warn(f'/observe_pose 6개 아님: {len(pose)}')
@@ -201,15 +225,86 @@ class VisionNode(Node):
         )
 
     def _current_T(self):
-        """변환에 쓸 T 반환. 동적 T 우선, 없으면 고정 T 폴백."""
         if self.current_T_cam2base is not None:
             return self.current_T_cam2base
         self.get_logger().warn('[동적 T] 아직 없음 → 고정 T 폴백 사용')
         return self.T_CAM2BASE.get(self.shelf_level)
 
-    # ----------------------------------------------------------
-    # brain 콜백
-    # ----------------------------------------------------------
+    def _pub_dist_status(self, status, dist_mm):
+        """거리 상태 발행: 'ok:250' / 'too_close:195' / 'too_far:315'"""
+        m = String()
+        m.data = f'{status}:{dist_mm:.0f}'
+        self._dist_status_pub.publish(m)
+
+    def _detect_markers(self):
+        """좌우 마커 검출 → {id: 중심픽셀x} 반환. 없으면 빈 dict."""
+        if self.color_img is None:
+            return {}
+        if self._aruco_new:
+            corners, ids, _ = self.aruco_detector.detectMarkers(self.color_img)
+        else:
+            corners, ids, _ = cv2.aruco.detectMarkers(
+                self.color_img, self.aruco_dict, parameters=self.aruco_params)
+        result = {}
+        if ids is None:
+            return result
+        for i, mid in enumerate(ids.flatten()):
+            c = corners[i][0]
+            px = float(np.mean(c[:, 0]))
+            result[int(mid)] = px
+        return result
+
+    def _try_marker_realign(self):
+        """블록 안 보일 때: 마커로 J1 보정량 계산해서 /j1_correction 발행.
+        - 두 마커 중심이 기준에서 벗어난 만큼 J1 보정 (한 번에).
+        - 마커 못 찾거나 보정량이 한계 초과면 realign_fail (AGV 재정차)."""
+        markers = self._detect_markers()
+        has_left = MARKER_ID_LEFT in markers
+        has_right = MARKER_ID_RIGHT in markers
+
+        if not has_left and not has_right:
+            self.get_logger().warn('[마커보정] 마커 안 보임 → realign_fail (AGV 재정차 필요)')
+            self._j1_corr_pub.publish(String(data='realign_fail'))
+            return
+
+        # 두 마커 있으면 중심, 하나만 있으면 그거 기준(덜 정확하지만 방향은 나옴)
+        if has_left and has_right:
+            center = (markers[MARKER_ID_LEFT] + markers[MARKER_ID_RIGHT]) / 2.0
+            self.get_logger().info(
+                f'[마커보정] 양쪽 검출 L={markers[MARKER_ID_LEFT]:.0f} '
+                f'R={markers[MARKER_ID_RIGHT]:.0f} 중심={center:.0f}'
+            )
+        elif has_left:
+            center = markers[MARKER_ID_LEFT]
+            self.get_logger().warn(f'[마커보정] 왼쪽만 검출 L={center:.0f} (한쪽만)')
+        else:
+            center = markers[MARKER_ID_RIGHT]
+            self.get_logger().warn(f'[마커보정] 오른쪽만 검출 R={center:.0f} (한쪽만)')
+
+        ref = MARKER_CENTER_REF.get(self.shelf_level, 320)
+        offset_px = center - ref
+        j1_corr = J1_SIGN * offset_px * PIXEL_TO_J1
+
+        self.get_logger().info(
+            f'[마커보정] 중심={center:.0f} 기준={ref} 벗어남={offset_px:.0f}px '
+            f'→ J1보정={j1_corr:.1f}도'
+        )
+
+        if abs(j1_corr) > J1_CORRECTION_MAX:
+            self.get_logger().warn(
+                f'[마커보정] 보정량 {j1_corr:.1f}도 > 한계 {J1_CORRECTION_MAX} '
+                f'→ realign_fail (AGV 재정차 필요)'
+            )
+            self._j1_corr_pub.publish(String(data='realign_fail'))
+            return
+
+        # "층:보정량" 발행 → pick이 J1 돌려 재관측
+        self._j1_corr_pub.publish(String(data=f'{self.shelf_level}:{j1_corr:.2f}'))
+        self.get_logger().info(f'[마커보정] /j1_correction 발행: {self.shelf_level}:{j1_corr:.2f}')
+        # 발행 후 검출 중단 (pick이 재관측+재활성화 해줌)
+        self.mode = MODE_IDLE
+
+    # ---------- brain 콜백 ----------
     def _activate_callback(self, msg: String):
         data = msg.data.strip()
         if data == 'stop':
@@ -220,7 +315,6 @@ class VisionNode(Node):
             self.mode = MODE_QR_PLACE
             self.get_logger().info('QR place 좌표 계산 모드')
         else:
-            # "item:level" 파싱
             if ':' in data:
                 item, level_str = data.rsplit(':', 1)
                 try:
@@ -230,8 +324,6 @@ class VisionNode(Node):
             else:
                 item, level = data, self.shelf_level
 
-            # 폴백 T는 티칭된 층만 있음. 동적 T가 있으면 층 무관하게 진행 가능하나,
-            # depth range 등 층 정보가 필요하므로 알 수 없는 층은 경고만.
             if level not in DEPTH_RANGE:
                 self.get_logger().error(f'알 수 없는 층: {level} - 무시')
                 return
@@ -239,6 +331,7 @@ class VisionNode(Node):
             self.target_item = item
             self.shelf_level = level
             self.mode = MODE_BLOCK
+            self.not_found_count = 0
             self.get_logger().info(f'블록 검출 모드 - 타겟: {item}, 층: {level}')
 
     def _state_callback(self, msg: String):
@@ -252,9 +345,7 @@ class VisionNode(Node):
                 self.mode = MODE_IDLE
                 self.get_logger().info('QR 검증 모드 종료')
 
-    # ----------------------------------------------------------
-    # 프레임 처리
-    # ----------------------------------------------------------
+    # ---------- 프레임 처리 ----------
     def _process_frame(self):
         if self.color_img is None:
             return
@@ -267,9 +358,7 @@ class VisionNode(Node):
         elif self.mode == MODE_QR_PLACE:
             self._detect_qr_place()
 
-    # ----------------------------------------------------------
-    # 블록 검출 (YOLO + eye-in-hand 동적 변환)
-    # ----------------------------------------------------------
+    # ---------- 블록 검출 ----------
     def _detect_block(self):
         if self.depth_img is None or self.intrinsics is None:
             self.get_logger().warn('depth/intrinsic 아직 준비 안 됨')
@@ -286,15 +375,27 @@ class VisionNode(Node):
                 break
 
         if target_box is None:
-            self.get_logger().warn(f'{self.target_item} 못 찾음, 재시도')
+            self.not_found_count += 1
+            self.get_logger().warn(
+                f'{self.target_item} 못 찾음 ({self.not_found_count}/{NOT_FOUND_LIMIT})'
+            )
+            if self.not_found_count >= NOT_FOUND_LIMIT:
+                # 일정 횟수 실패 → 마커로 J1 보정 시도
+                self.get_logger().warn('→ 마커 J1 보정 시도')
+                self._try_marker_realign()
+                self.not_found_count = 0
             return
+        self.not_found_count = 0
 
         x1, y1, x2, y2 = map(int, target_box.xyxy[0])
         cx = (x1 + x2) // 2
         cy = (y1 + y2) // 2
-        self.get_logger().info(f'[bbox] x1={x1} y1={y1} x2={x2} y2={y2} cx={cx} cy={cy} (H={img.shape[0]} W={img.shape[1]})')
+        self.get_logger().info(
+            f'[bbox] x1={x1} y1={y1} x2={x2} y2={y2} cx={cx} cy={cy} '
+            f'(H={img.shape[0]} W={img.shape[1]})'
+        )
 
-        # 잘림 감지
+        # 잘림 감지 (좌우 + 위. 아래는 관측 자세상 정상이라 제외)
         H, W = img.shape[:2]
         margin = 3
         if x1 <= margin or y1 <= margin or x2 >= W - margin:
@@ -302,7 +403,7 @@ class VisionNode(Node):
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             return
 
-        # depth 범위 층별
+        # depth 검출 필터
         dmin, dmax = DEPTH_RANGE.get(self.shelf_level, (110, 300))
         roi = self.depth_img[y1:y2, x1:x2]
         valid = roi[(roi > dmin) & (roi < dmax)]
@@ -311,7 +412,6 @@ class VisionNode(Node):
             self.get_logger().warn('depth 없음, 발행 안 함')
             return
 
-        # 블록 정면 = bbox 내 최소거리 클러스터
         near = np.min(valid)
         block_face = valid[valid < near + 25]
 
@@ -321,27 +421,42 @@ class VisionNode(Node):
 
         dist_m = float(np.median(block_face)) / 1000.0
 
-        # 층별 거리 sanity check
         if not (dmin / 1000.0 <= dist_m <= dmax / 1000.0):
             self.get_logger().warn(
-                f'dist={dist_m:.3f}m 층{self.shelf_level} 범위 밖 - 발행 안 함'
+                f'dist={dist_m:.3f}m 층{self.shelf_level} 검출범위 밖 - 발행 안 함'
             )
             return
 
-        # DEPTH DEBUG
         self.get_logger().info(
             f"[DEPTH DEBUG] L{self.shelf_level} selected={dist_m*1000:.0f}mm | "
-            f"bbox min={np.min(valid):.0f}, "
-            f"p30={np.percentile(valid, 30):.0f}, "
-            f"median={np.median(valid):.0f}, "
-            f"count={len(valid)}"
+            f"bbox min={np.min(valid):.0f}, p30={np.percentile(valid, 30):.0f}, "
+            f"median={np.median(valid):.0f}, count={len(valid)}"
         )
 
         if dist_m <= 0.0:
-            self.get_logger().warn(
-                f'{self.target_item} raw depth 측정 실패(0) - 발행 안 함'
-            )
+            self.get_logger().warn(f'{self.target_item} raw depth 실패(0) - 발행 안 함')
             return
+
+        # ===== [거리 판정] 파지 가능 범위 체크 =====
+        dist_mm = dist_m * 1000
+        glo, ghi = GRASP_DEPTH_RANGE.get(self.shelf_level, (210, 301))
+        if dist_mm < glo:
+            self.get_logger().warn(
+                f'[거리] 너무 가까움 {dist_mm:.0f} < {glo} - 파지 보류 (AGV 후진 필요)'
+            )
+            self._pub_dist_status('too_close', dist_mm)
+            self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+            return
+        elif dist_mm > ghi:
+            self.get_logger().warn(
+                f'[거리] 너무 멈 {dist_mm:.0f} > {ghi} - 파지 보류 (AGV 전진 필요)'
+            )
+            self._pub_dist_status('too_far', dist_mm)
+            self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+            return
+        else:
+            # 작업 가능 거리 → 현재 거리 알림 후 파지 진행
+            self._pub_dist_status('ok', dist_mm)
 
         # 카메라 3D 좌표 (deproject)
         fx, fy, ppx, ppy = self.intrinsics
@@ -355,7 +470,7 @@ class VisionNode(Node):
             f'dist={dist_m:.3f}m cam_xyz={[round(v, 3) for v in cam_xyz]}'
         )
 
-        # ===== [동적 T] 현재 관측 자세 기준 변환 =====
+        # ===== [동적 T] 변환 =====
         cam_pt = np.array([cam_xyz[0]*1000.0, cam_xyz[1]*1000.0, cam_xyz[2]*1000.0, 1.0])
         T = self._current_T()
         base_pt = (T @ cam_pt)[:3]
@@ -372,11 +487,13 @@ class VisionNode(Node):
         self.get_logger().info(f'/box_pose 발행: {[round(v, 1) for v in coords]}')
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
-        cv2.imwrite('/home/zzz/pj3_ws/deburg/detect_latest.jpg', img)
+        try:
+            cv2.imwrite('/home/zzz/pj3_ws/deburg/detect_latest.jpg', img)
+        except Exception:
+            pass
         self.mode = MODE_IDLE
 
     def _get_robust_depth(self, cx, cy, k=12):
-        """중심 주변 patch에서 유효 depth 모아 p30 반환 (mm→m). QR place용."""
         H, W = self.depth_img.shape[:2]
         y0, y1 = max(0, cy - k), min(H, cy + k + 1)
         x0, x1 = max(0, cx - k), min(W, cx + k + 1)
@@ -407,9 +524,7 @@ class VisionNode(Node):
         except Exception as e:
             self.get_logger().warn(f'detected_image 발행 실패: {e}')
 
-    # ----------------------------------------------------------
-    # QR 검증 (구역 확인용 - 좌표 계산 안 함)
-    # ----------------------------------------------------------
+    # ---------- QR 검증 ----------
     def _detect_qr(self):
         img = self.color_img
         zone = None
@@ -435,9 +550,7 @@ class VisionNode(Node):
                 self._qr_pub.publish(out)
                 self.get_logger().info(f'/depth_qr 발행: {out.data}')
 
-    # ----------------------------------------------------------
-    # QR 기반 플레이싱 좌표 계산 (방법 B)
-    # ----------------------------------------------------------
+    # ---------- QR place ----------
     def _detect_qr_place(self):
         if self.depth_img is None or self.intrinsics is None:
             self.get_logger().warn('depth/intrinsic 준비 안 됨')
@@ -472,7 +585,6 @@ class VisionNode(Node):
             f'QR place: zone={zone} 픽셀=({cx},{cy}) dist={dist_m:.3f}m'
         )
 
-        # ===== [동적 T] QR place도 현재 관측 자세 기준 변환 =====
         cam_pt = np.array([X*1000.0, Y*1000.0, Z*1000.0, 1.0])
         T = self._current_T()
         base_pt = (T @ cam_pt)[:3]
