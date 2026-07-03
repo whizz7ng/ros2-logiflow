@@ -446,6 +446,7 @@ class PickNode(Node):
                     y -= y * 0.13
                 # elif y < 0:
                 #     y += y * 0.0
+                
                   
             self.get_logger().info(
                 f"피킹 좌표(보정 후): x={x:.1f}, y={y:.1f}, z={z:.1f}, "
@@ -538,7 +539,7 @@ class PickNode(Node):
                 APPROACH_X_1F = 40.0   # 블록 앞 40mm에서 시작
                 front = [x - APPROACH_X_1F, y, z, rx, ry, rz]
                 self._log(f"[1F] 블록 앞으로: {[round(v,1) for v in front]}")
-                self.mc.send_coords(front, MOVE_SPEED, 0)
+                self.mc.send_coords(front, MOVE_SPEED, 1)
                 if not self._safe_sleep(5.0):
                     return
                   
