@@ -278,14 +278,15 @@ class PickNode(Node):
             target=self._observe_move_sequence, args=(level,), daemon=True
         ).start()
 
-    def _observe_move_sequence(self, level):
+    def _observe_move_sequence(self, level, j1_offset=0.0):
         try:
             if self.emergency_active:
                 return
               
             self.current_level = level
-            angles = SHELF_ANGLES[level]
-            self._log(f"[OBSERVE] {level}층 관측 자세로 이동: angles={angles}")
+            angles = list(SHELF_ANGLES[level])
+            angles[0] += j1_offset               # J1 보정 적용
+            self._log(f"[OBSERVE] {level}층 관측 (J1 offset={j1_offset}): {[round(a,1) for a in angles]}")
             self.mc.send_angles(angles, MOVE_SPEED)
             if not self._safe_sleep(OBSERVE_SETTLE_WAIT):
                 return
