@@ -145,7 +145,9 @@ class PickNode(Node):
         self.create_subscription(
             String, "/observe_move", self._observe_move_callback, 10
         )
-
+      
+        self.create_subscription(String, "/j1_correction", self._j1_correction_callback, 10)
+      
         # 발행자
         self._pick_status_pub = self.create_publisher(String, "/pick_status", 10)
         self._status_pub = self.create_publisher(String, "/arm/status", 10)
@@ -342,6 +344,40 @@ class PickNode(Node):
             self.get_logger().info("비상정지 해제 - 새 명령 수신 가능")
         else:
             self.get_logger().warn(f"알 수 없는 emergency_stop 명령: {msg.data}")
+          
+          
+     def _j1_correction_callback(self, msg: String):
+        """vision이 마커로 계산한 J1 보정량 수신 → J1 돌려서 재관측."""
+        if self.emergency_active:
+            return
+        data = msg.data.strip()
+  
+        if data == 'realign_fail':
+            # 마커 보정 불가 (마커 안 보이거나 너무 틀어짐) → AGV 재정차 필요
+            self.get_logger().error("[J1보정] 실패 - AGV 재정차 필요")
+            self._pub_pick_status("realign_fail")
+            return
+  
+        # "층:보정량" 파싱
+        try:
+            level_str, corr_str = data.split(':', 1)
+            level = int(level_str)
+            j1_corr = float(corr_str)
+        except (ValueError, IndexError):
+            self.get_logger().error(f"[J1보정] 파싱 실패: '{data}'")
+            return
+  
+        self.get_logger().info(f"[J1보정] {level}층 J1 {j1_corr:+.1f}도 보정 재관측")
+        with self._busy_lock:
+            if self._busy:
+                self.get_logger().warn("작업 중 - J1보정 대기")
+                return
+            self._busy = True
+        threading.Thread(
+            target=self._observe_move_sequence,
+            args=(level, j1_corr),      # 기존 J1 오프셋 재관측 재활용
+            daemon=True
+        ).start()
 
     # =========================
     # 실제 로봇팔 동작 시퀀스
