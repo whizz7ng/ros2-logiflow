@@ -371,7 +371,7 @@ class VisionNode(Node):
         self.get_logger().info(f'/box_pose 발행: {[round(v, 1) for v in coords]}')
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
-        cv2.imwrite('/tmp/detect_latest.jpg', img)
+        cv2.imwrite('/home/zzz/pj3_ws/deburg/detect_latest.jpg', img)
         self.mode = MODE_IDLE
 
     def _get_robust_depth(self, cx, cy, k=12):
