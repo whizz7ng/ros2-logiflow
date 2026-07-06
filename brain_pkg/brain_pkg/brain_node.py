@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-brain_node.py  (eye-in-hand 관측 흐름 추가 버전)
+brain_node.py  (eye-in-hand 관측 흐름 + AGV align 재관측 + pick_failed 재관측 버전)
 
 [eye-in-hand 변경 요약]
   (1) 주문 포맷에 층(level) 추가: "물품:구역:층"  예) "red_cross:A:1"
@@ -13,9 +13,20 @@ brain_node.py  (eye-in-hand 관측 흐름 추가 버전)
       (카메라가 그리퍼에 붙어서, 팔이 관측 자세에 있어야 vision 좌표계산이 맞음)
   (3) /vision_activate 포맷: "item:level" (vision_node가 층별 T_cam2base 선택)
 
+[AGV align 변경 요약]
+  vision_node가 depth 없음/too_far/too_close 등으로 /marker_agv_pose를 발행하면,
+  agv_align_node가 /agv_align을 짧게 발행해 AGV를 한 번 보정 이동시킨다.
+  이동이 끝나면 agv_align_node가 /align_status "step_done"을 발행한다.
+  brain_node는 step_done을 받으면 다시 /observe_move부터 시작해서 새 관측을 수행한다.
+
+[pick_failed 변경 요약]
+  pick_node가 파지 실패 시 /pick_status "pick_failed"를 발행하면,
+  brain_node는 바로 ERROR로 가지 않고 observe_move부터 한 번 더 재관측한다.
+
 새 토픽:
   /observe_move  (String) brain -> pick : 관측할 층 번호 "1"/"2"
   /observe_ready (String) pick -> brain : 관측 자세 도착 완료 "ready"
+  /align_status  (String) agv_align -> brain : AGV 보정 1스텝 완료 "step_done"
 """
 
 from collections import deque
@@ -47,8 +58,12 @@ class BrainNode(Node):
         self.create_subscription(String, '/pick_status', self._pick_status_callback, 10)
         self.create_subscription(String, '/nav_status', self._nav_status_callback, 10)
         self.create_subscription(String, '/emergency_stop', self._emergency_stop_callback, 10)
+
         # ===== [신규] pick_node의 관측 자세 도착 신호 =====
         self.create_subscription(String, '/observe_ready', self._observe_ready_callback, 10)
+
+        # ===== [신규] agv_align_node의 차체 보정 1스텝 완료 신호 =====
+        self.create_subscription(String, '/align_status', self._align_status_callback, 10)
 
         # Publishers
         self._vision_activate_pub = self.create_publisher(String, '/vision_activate', 10)
@@ -57,10 +72,13 @@ class BrainNode(Node):
         self._place_target_pub = self.create_publisher(String, '/place_target', 10)
         self._arm_status_pub = self.create_publisher(String, '/arm_status', 10)
         self._go_parking_pub = self.create_publisher(Empty, '/go_parking', 10)
+
         # ===== [수정] 기존 self.__pub = create_publisher(String, '/', 10) 는 토픽명이 '/'로 잘못돼 있었음 =====
         # /wms_update 로 명시적으로 발행하도록 수정
         self._wms_update_pub = self.create_publisher(String, '/wms_update', 10)
+
         self._brain_state_pub = self.create_publisher(String, '/brain_state', 10)
+
         # ===== [신규] 관측 자세 이동 명령 =====
         self._observe_move_pub = self.create_publisher(String, '/observe_move', 10)
 
@@ -70,13 +88,16 @@ class BrainNode(Node):
         self.current_order = None
         self.zone = None
         self.item = None
-        self.current_item = None
-        self.current_level = 1
-        self.level = DEFAULT_LEVEL        # ===== [신규] 현재 주문의 층 =====
+        self.level = DEFAULT_LEVEL
         self.emergency_active = False
-        # pick 실패 시 재관측 재시도 횟수
+
+        # ===== [신규] AGV 차체 보정 재관측 제한 =====
+        self.align_retry_count = 0
+        self.ALIGN_RETRY_MAX = 3
+
+        # ===== [신규] pick 실패 시 재관측 제한 =====
         self.pick_retry_count = 0
-        self.PICK_REOBSERVE_MAX = 1   # 처음엔 1회 추천. 필요하면 2로 증가
+        self.PICK_REOBSERVE_MAX = 1
 
         self.get_logger().info('brain_node 시작 - 상태: IDLE')
         self._pub_state()
@@ -103,6 +124,7 @@ class BrainNode(Node):
         """
         order = order.strip()
         parts = order.split(':')
+
         item = parts[0].strip()
         zone = parts[1].upper().strip() if len(parts) >= 2 and parts[1].strip() else 'A'
 
@@ -124,17 +146,20 @@ class BrainNode(Node):
         if self.emergency_active:
             self.get_logger().warn('비상정지 상태이므로 다음 주문 시작 안 함')
             return
+
         if not self.order_queue:
             self.get_logger().info('대기 주문 없음')
             return
 
         self.current_order = self.order_queue.popleft()
+
         # ===== [변경] 층까지 파싱 =====
         self.item, self.zone, self.level = self._parse_order(self.current_order)
-      
-        # 새 주문 시작이므로 pick 재관측 retry 카운터 초기화
+
+        # 새 주문 시작 시 보정/재시도 카운터 초기화
+        self.align_retry_count = 0
         self.pick_retry_count = 0
-      
+
         self.get_logger().info(
             f'다음 주문 시작: {self.current_order}, '
             f'item={self.item}, zone={self.zone}, level={self.level}'
@@ -159,6 +184,8 @@ class BrainNode(Node):
         self.zone = None
         self.item = None
         self.level = DEFAULT_LEVEL
+        self.align_retry_count = 0
+        self.pick_retry_count = 0
 
         if self.order_queue:
             self.get_logger().info(
@@ -187,7 +214,8 @@ class BrainNode(Node):
             self._start_next_order()
         else:
             self.get_logger().info(
-                f'현재 {self.state} 상태라 주문 큐에 저장. 대기 주문 수: {len(self.order_queue)}'
+                f'현재 {self.state} 상태라 주문 큐에 저장. '
+                f'대기 주문 수: {len(self.order_queue)}'
             )
 
     def _box_pose_callback(self, msg):
@@ -203,6 +231,9 @@ class BrainNode(Node):
             )
             return
 
+        # 정상 좌표를 받았으므로 align retry는 성공적으로 종료
+        self.align_retry_count = 0
+
         self.state = 'PICKING'
         self._pub_state()
 
@@ -216,25 +247,26 @@ class BrainNode(Node):
             )
             return
 
-        self.get_logger().info(f'/pick_status 수신: {msg.data}')
+        status = msg.data.strip()
+        self.get_logger().info(f'/pick_status 수신: {status}')
 
-        if msg.data == 'done':
+        if status == 'done':
             if self.state != 'PICKING':
                 self.get_logger().warn(
                     f'pick done 수신했지만 현재 상태가 PICKING이 아님: {self.state}'
                 )
                 return
-        
+
             # 픽 성공했으므로 재관측 retry 카운터 초기화
             self.pick_retry_count = 0
-        
+
             self.state = 'NAV_TO_DEST'
             self._pub_state()
 
             self._publish_string(self._arm_status_pub, 'picked')
             self.get_logger().info('/arm_status 발행: picked')
 
-        elif msg.data == 'placing_done':
+        elif status == 'placing_done':
             if self.state != 'PLACING':
                 self.get_logger().warn(
                     f'placing_done 수신했지만 현재 상태가 PLACING이 아님: {self.state}'
@@ -245,8 +277,8 @@ class BrainNode(Node):
             self.get_logger().info('/arm_status 발행: placed')
 
             self._finish_current_order()
-          
-        elif msg.data == 'pick_failed':
+
+        elif status == 'pick_failed':
             if self.state != 'PICKING':
                 self.get_logger().warn(
                     f'pick_failed 수신했지만 현재 상태가 PICKING이 아님: {self.state}'
@@ -259,7 +291,7 @@ class BrainNode(Node):
                 self.pick_retry_count += 1
 
                 self.get_logger().warn(
-                    f'재관측 재시도 {self.pick_retry_count}/{self.PICK_REOBSERVE_MAX}'
+                    f'pick 재관측 재시도 {self.pick_retry_count}/{self.PICK_REOBSERVE_MAX}'
                 )
 
                 # 다시 관측 자세부터 시작
@@ -273,19 +305,19 @@ class BrainNode(Node):
                 return
 
             # 재시도 초과
-            self.get_logger().error('재관측 재시도 초과 - 픽 실패 처리')
+            self.get_logger().error('pick 재관측 재시도 초과 - 픽 실패 처리')
             self.pick_retry_count = 0
             self.state = 'ERROR'
             self._pub_state()
             return
-      
-        elif msg.data == 'error':
+
+        elif status == 'error':
             self.get_logger().error('pick_node error 수신')
             self.state = 'ERROR'
             self._pub_state()
 
         else:
-            self.get_logger().warn(f'알 수 없는 pick_status: {msg.data}')
+            self.get_logger().warn(f'알 수 없는 pick_status: {status}')
 
     def _nav_status_callback(self, msg):
         if self.emergency_active:
@@ -304,15 +336,13 @@ class BrainNode(Node):
                 return
 
             # ===== [변경] eye-in-hand: 바로 vision 켜지 않고 관측 자세부터 이동 =====
-            # 기존:
-            #   self.state = 'VISION'
-            #   self._publish_string(self._vision_activate_pub, self.item)
-            # 변경: OBSERVING 상태로 가서 pick_node에 관측 자세 이동 명령
             self.state = 'OBSERVING'
             self._pub_state()
 
             self._publish_string(self._observe_move_pub, str(self.level))
-            self.get_logger().info(f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)')
+            self.get_logger().info(
+                f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)'
+            )
 
         elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
@@ -352,6 +382,8 @@ class BrainNode(Node):
             self.zone = None
             self.item = None
             self.level = DEFAULT_LEVEL
+            self.align_retry_count = 0
+            self.pick_retry_count = 0
             self._pub_state()
 
             if self.order_queue:
@@ -366,20 +398,68 @@ class BrainNode(Node):
         if self.emergency_active:
             self.get_logger().warn('/observe_ready 수신했지만 비상정지 상태라 무시')
             return
-        # OBSERVING(최초 관측) 또는 VISION(J1 보정 재관측) 둘 다 처리
+
+        # OBSERVING(최초 관측 / AGV align 후 재관측 / pick_failed 후 재관측)
+        # 또는 VISION(J1 보정 재관측) 둘 다 처리
         if self.state not in ('OBSERVING', 'VISION'):
             self.get_logger().warn(
                 f'/observe_ready 수신했지만 상태가 OBSERVING/VISION 아님: {self.state}'
             )
             return
+
         self.get_logger().info(f'/observe_ready 수신: {msg.data} (관측 자세 도착)')
+
         # 최초 관측이면 VISION으로 전이, 이미 VISION이면(J1 보정 재관측) 유지
         if self.state == 'OBSERVING':
             self.state = 'VISION'
             self._pub_state()
+
         activate_data = f'{self.item}:{self.level}'
         self._publish_string(self._vision_activate_pub, activate_data)
         self.get_logger().info(f'/vision_activate 발행: {activate_data}')
+
+    # ===== [신규] AGV 차체 보정 1스텝 완료 후 다시 관측 =====
+    def _align_status_callback(self, msg):
+        if self.emergency_active:
+            self.get_logger().warn(
+                f'/align_status 수신했지만 비상정지 상태라 무시: {msg.data}'
+            )
+            return
+
+        status = msg.data.strip()
+        self.get_logger().info(f'/align_status 수신: {status}')
+
+        if status != 'step_done':
+            self.get_logger().warn(f'알 수 없는 align_status: {status}')
+            return
+
+        # 차체 보정은 vision 단계에서만 의미 있음
+        if self.state != 'VISION':
+            self.get_logger().warn(
+                f'align step_done 수신했지만 현재 상태가 VISION이 아님: {self.state}'
+            )
+            return
+
+        if self.align_retry_count >= self.ALIGN_RETRY_MAX:
+            self.get_logger().error('AGV 차체 보정 반복 초과 → ERROR')
+            self.state = 'ERROR'
+            self._pub_state()
+            return
+
+        self.align_retry_count += 1
+
+        self.get_logger().warn(
+            f'AGV 차체 보정 후 재관측 {self.align_retry_count}/{self.ALIGN_RETRY_MAX}'
+        )
+
+        # 다시 관측 자세부터 시작
+        self.state = 'OBSERVING'
+        self._pub_state()
+
+        self._publish_string(self._observe_move_pub, str(self.level))
+        self.get_logger().info(
+            f'/observe_move 재발행: level={self.level} (AGV align 후 재관측)'
+        )
 
     def _emergency_stop_callback(self, msg):
         command = msg.data.strip().lower()
@@ -420,6 +500,8 @@ class BrainNode(Node):
         self.zone = None
         self.item = None
         self.level = DEFAULT_LEVEL
+        self.align_retry_count = 0
+        self.pick_retry_count = 0
         self.state = 'IDLE'
         self._pub_state()
 
