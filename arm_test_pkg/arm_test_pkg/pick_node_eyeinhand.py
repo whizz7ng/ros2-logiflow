@@ -582,68 +582,47 @@ class PickNode(Node):
                 #     return
 
                 # 6. 수평 전진 파지 (x만)
-                FORWARD_Y_COMP = 5.0
+                FORWARD_Y_COMP = 0.0
                 target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
                 self.mc.send_coords(target, DESCEND_SPEED, 1)
                 if not self._safe_sleep(4.0):
                     return
 
-                # ===== 그리퍼 닫기 + 실패 시 재시도 =====
-                gripped = False
-
-                for attempt in range(PICK_RETRY_MAX + 1):
-                    if attempt == 0:
-                        retry_x = x
-                        retry_y = y + FORWARD_Y_COMP_2F
-                        retry_z = target_z
-                        self._log("[2F] 그리퍼 닫기")
-                    else:
-                        self._log(f"[2F RETRY {attempt}/{PICK_RETRY_MAX}] 재파지 시도")
-
-                        # 실패했으면 다시 열고 살짝 더 깊고 낮게 접근
-                        self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
-                        if not self._safe_sleep(1.0):
-                            return
-
-                        retry_x = x + RETRY_X_PUSH_MM
-                        retry_z = target_z - RETRY_Z_DOWN_MM
-                        
-                        # y 방향 재시도 보정
-                        # 현재 y가 +면 더 안쪽/왼쪽으로, y가 -면 반대쪽으로 살짝 보정
-                        if y > 0:
-                            retry_y = y + FORWARD_Y_COMP_2F - RETRY_Y_SHIFT_MM
-                        elif y < 0:
-                            retry_y = y + FORWARD_Y_COMP_2F + RETRY_Y_SHIFT_MM
-                        else:
-                            retry_y = y + FORWARD_Y_COMP_2F
-
-                      
-                        retry_pose = [retry_x, retry_y, retry_z, rx, ry, rz]
-                        self._log(f"[2F RETRY] 재접근: {[round(v,1) for v in retry_pose]}")
-                        self.mc.send_coords(retry_pose, DESCEND_SPEED, 1)
-                        if not self._safe_sleep(3.0):
-                            return
-
-                    self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
-                    if not self._safe_sleep(2.5):
+                # 7. 그리퍼 닫기
+                self._log("[1F] 그리퍼 닫기")
+                self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
+                if not self._safe_sleep(2.5):
+                    return
+                
+                # 8. 파지 성공 여부 확인
+                if not self._check_gripped():
+                    self._log("[1F] 파지 실패 - 안전 후퇴 후 재관측 요청")
+                
+                    # 실패했으므로 그리퍼 다시 열기
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    if not self._safe_sleep(1.0):
                         return
-
-                    if self._check_gripped():
-                        gripped = True
-                        self._log(f"[2F] 파지 성공 attempt={attempt}")
-                        break
-
-                    self._log(f"[2F] 파지 실패 attempt={attempt}")
-
-                if not gripped:
-                    self._log("[2F] 재시도 후에도 파지 실패")
+                
+                    # 블록/랙 근처에서 뒤로 빼기
+                    back_1f = [x - 80, y + FORWARD_Y_COMP, z + 20, rx, ry, rz]
+                    self._log(f"[1F FAIL] 뒤로 빼기: {[round(v,1) for v in back_1f]}")
+                    self.mc.send_coords(back_1f, MOVE_SPEED, 0)
+                    if not self._safe_sleep(4.0):
+                        return
+                
+                    # 홈 복귀
+                    self._log("[1F FAIL] 홈 복귀")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    if not self._safe_sleep(4.0):
+                        return
+                
+                    # brain_node가 이걸 받고 /observe_move부터 다시 시작
                     self._pub_pick_status("pick_failed")
                     return
-
-                # 1. z 상승 (제자리에서 위로)
-                self._log("[2F] z 상승")
-
+                
+                self._log("[1F] 파지 성공")
+                
                 # 8. 뒤로 곧게 빼기
                 back_1f = [x - 80, y + FORWARD_Y_COMP, z + 20, rx, ry, rz]
                 self._log(f"[1F] 뒤로 빼기: {[round(v,1) for v in back_1f]}")
@@ -675,56 +654,39 @@ class PickNode(Node):
                     return
 
                 # ===== 그리퍼 닫기 + 실패 시 재시도 =====
-                gripped = False
-
-                for attempt in range(PICK_RETRY_MAX + 1):
-                    if attempt == 0:
-                        retry_x = x
-                        retry_y = y + FORWARD_Y_COMP_2F
-                        retry_z = target_z
-                        self._log("[2F] 그리퍼 닫기")
-                    else:
-                        self._log(f"[2F RETRY {attempt}/{PICK_RETRY_MAX}] 재파지 시도")
-
-                        # 실패했으면 다시 열고 살짝 더 깊고 낮게 접근
-                        self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
-                        if not self._safe_sleep(1.0):
-                            return
-
-                        retry_x = x + RETRY_X_PUSH_MM
-                        retry_z = target_z - RETRY_Z_DOWN_MM
-                        
-                        # y 방향 재시도 보정
-                        # 현재 y가 +면 더 안쪽/왼쪽으로, y가 -면 반대쪽으로 살짝 보정
-                        if y > 0:
-                            retry_y = y + FORWARD_Y_COMP_2F - RETRY_Y_SHIFT_MM
-                        elif y < 0:
-                            retry_y = y + FORWARD_Y_COMP_2F + RETRY_Y_SHIFT_MM
-                        else:
-                            retry_y = y + FORWARD_Y_COMP_2F
-
-                      
-                        retry_pose = [retry_x, retry_y, retry_z, rx, ry, rz]
-                        self._log(f"[2F RETRY] 재접근: {[round(v,1) for v in retry_pose]}")
-                        self.mc.send_coords(retry_pose, DESCEND_SPEED, 1)
-                        if not self._safe_sleep(3.0):
-                            return
-
-                    self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
-                    if not self._safe_sleep(2.5):
+                # 그리퍼 닫기
+                self._log("[2F] 그리퍼 닫기")
+                self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
+                if not self._safe_sleep(2.5):
+                    return
+                
+                # 파지 성공 여부 확인
+                if not self._check_gripped():
+                    self._log("[2F] 파지 실패 - 안전 후퇴 후 재관측 요청")
+                
+                    # 실패했으므로 그리퍼 다시 열기
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    if not self._safe_sleep(1.0):
                         return
-
-                    if self._check_gripped():
-                        gripped = True
-                        self._log(f"[2F] 파지 성공 attempt={attempt}")
-                        break
-
-                    self._log(f"[2F] 파지 실패 attempt={attempt}")
-
-                if not gripped:
-                    self._log("[2F] 재시도 후에도 파지 실패")
+                
+                    # 블록 앞에서 뒤로 빼기
+                    back_fail = [x - 70, y, target_z + 20, rx, ry, rz]
+                    self._log(f"[2F FAIL] 뒤로 빼기: {[round(v,1) for v in back_fail]}")
+                    self.mc.send_coords(back_fail, MOVE_SPEED, 1)
+                    if not self._safe_sleep(3.0):
+                        return
+                
+                    # 홈 복귀
+                    self._log("[2F FAIL] 홈 복귀")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    if not self._safe_sleep(4.0):
+                        return
+                
+                    # brain_node가 이걸 받고 /observe_move부터 다시 시작
                     self._pub_pick_status("pick_failed")
                     return
+                
+                self._log("[2F] 파지 성공")
 
                 # 1. z 상승 (제자리에서 위로)
                 self._log("[2F] z 상승")
