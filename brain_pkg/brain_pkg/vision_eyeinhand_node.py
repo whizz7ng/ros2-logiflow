@@ -494,9 +494,9 @@ class VisionNode(Node):
             self.target_item = item
             self.shelf_level = level
 
-            # 새 관측 시작마다 이전 observe_pose/T를 무효화
-            self.current_T_cam2base = None
-            self.have_fresh_observe_pose = False
+            # # 새 관측 시작마다 이전 observe_pose/T를 무효화
+            # self.current_T_cam2base = None
+            # self.have_fresh_observe_pose = False
             # 주의: realign_count는 여기서 리셋 안 함.
           
             self.mode = MODE_BLOCK
