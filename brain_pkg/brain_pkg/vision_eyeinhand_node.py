@@ -80,9 +80,12 @@ SHELF_POSES = {
 }
 
 # depth 검출 유효 범위(mm) - 노이즈 필터 (넓게)
+# depth 검출 유효 범위(mm) - 노이즈 필터.
+# 파지 판정(GRASP_DEPTH_RANGE)보다 넉넉히 넓혀야, 파지 범위 밖이어도
+# 검출은 되어서 too_far/too_close 판정이 뜬다. (너무 좁으면 멀 때 '검출 안됨'으로 빠짐)
 DEPTH_RANGE = {
-    1: (150, 320),
-    2: (150, 360),
+    1: (150, 450),
+    2: (150, 450),
 }
 
 # ===== [거리 판정] 파지 가능 depth 범위(mm) =====
@@ -635,6 +638,7 @@ class VisionNode(Node):
                 f'[거리] 너무 가까움 {dist_mm:.0f} < {glo} - 파지 보류 (AGV 후진 필요)'
             )
             self._pub_dist_status('too_close', dist_mm)
+            self._publish_marker_agv()   # AGV 후진하도록 마커 AGV 좌표 제공
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             return
         elif dist_mm > ghi:
@@ -642,6 +646,7 @@ class VisionNode(Node):
                 f'[거리] 너무 멈 {dist_mm:.0f} > {ghi} - 파지 보류 (AGV 전진 필요)'
             )
             self._pub_dist_status('too_far', dist_mm)
+            self._publish_marker_agv()   # AGV 전진하도록 마커 AGV 좌표 제공
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             return
         else:
