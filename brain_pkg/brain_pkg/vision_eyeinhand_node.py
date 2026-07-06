@@ -288,7 +288,8 @@ class VisionNode(Node):
 
     def _detect_markers_pose(self):
         """좌우 마커의 3D pose(카메라 기준 tvec) 검출.
-        → {id: tvec(np.array [x,y,z] m)}. 없으면 빈 dict."""
+        → {id: tvec(np.array [x,y,z] m)}. 없으면 빈 dict.
+        (estimatePoseSingleMarkers가 없는 신버전 OpenCV: solvePnP 사용)"""
         if self.color_img is None or self.intrinsics is None:
             return {}
         fx, fy, ppx, ppy = self.intrinsics
@@ -302,10 +303,24 @@ class VisionNode(Node):
         result = {}
         if ids is None:
             return result
+
+        # 마커 한 변 절반 크기로 3D 코너 좌표 정의 (마커 중심 원점)
+        h = MARKER_LENGTH / 2.0
+        obj_pts = np.array([
+            [-h,  h, 0],
+            [ h,  h, 0],
+            [ h, -h, 0],
+            [-h, -h, 0],
+        ], dtype=np.float64)
+
         for i, mid in enumerate(ids.flatten()):
-            _, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(
-                [corners[i]], MARKER_LENGTH, K, dist)
-            result[int(mid)] = tvec[0][0]   # [x, y, z] (m)
+            img_pts = corners[i][0].astype(np.float64)  # 4x2
+            ok, rvec, tvec = cv2.solvePnP(
+                obj_pts, img_pts, K, dist,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE
+            )
+            if ok:
+                result[int(mid)] = tvec.flatten()  # [x, y, z] (m)
         return result
 
     def _marker_to_agv(self, tvec_m):
