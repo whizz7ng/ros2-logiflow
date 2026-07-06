@@ -454,8 +454,8 @@ class PickNode(Node):
                 # 2층 (기존)
                 if y > 0:
                     y -= y * 0.13
-                # elif y < 0:
-                #     y += y * 0.0
+                elif y < 0:
+                     y += y * 0.2
                 
                   
             self.get_logger().info(
