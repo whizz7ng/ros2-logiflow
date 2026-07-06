@@ -169,7 +169,8 @@ class VisionNode(Node):
         self.cut_count = 0         # bbox가 화면 좌/우/상단에 잘린 연속 횟수
         self.realign_count = 0     # 마커 J1 보정 반복 횟수
         self.center_miss_count = 0  # 블록 중심이 화면 중앙에서 벗어난 연속 횟수
-
+        self.depth_fail_count = 0
+      
         self.get_logger().info(f'YOLO 모델 로드 중: {MODEL_PATH}')
         self.model = YOLO(MODEL_PATH)
 
@@ -502,6 +503,7 @@ class VisionNode(Node):
             self.not_found_count = 0
             self.cut_count = 0
             self.center_miss_count = 0
+            self.depth_fail_count = 0
             
            
             # 주의: realign_count는 여기서 리셋 안 함.
@@ -632,9 +634,29 @@ class VisionNode(Node):
         valid = roi[(roi > dmin) & (roi < dmax)]
 
         if valid.size < 30:
-            self.get_logger().warn('depth 없음, 발행 안 함')
+            self.depth_fail_count += 1
+            self.get_logger().warn(
+                f'depth 없음 ({self.depth_fail_count}/{NOT_FOUND_LIMIT}) - ArUco 기반 차체교정 대기'
+            )
+        
+            # depth가 계속 없으면 ArUco 마커를 읽어서 AGV 보정 좌표 발행
+            if self.depth_fail_count >= NOT_FOUND_LIMIT:
+                self.get_logger().warn('→ depth 연속 실패: ArUco 마커 기반 AGV 자세교정 요청')
+        
+                # 마커가 보이면 /marker_agv_pose 발행
+                self._publish_marker_agv()
+                if not poses:
+                      self.get_logger().warn('depth 실패했지만 ArUco 마커도 안 보임 → realign_fail')
+                      self._emit_realign_fail()
+                  else:
+                      self._publish_marker_agv()
+        
+                # brain/nav가 보정하도록, 현재 vision은 멈춤
+                self.mode = MODE_IDLE
+                self.depth_fail_count = 0
+        
             return
-
+        self.depth_fail_count = 0
         near = np.min(valid)
         block_face = valid[valid < near + 25]
 
