@@ -586,9 +586,18 @@ class PickNode(Node):
                             return
 
                         retry_x = x + RETRY_X_PUSH_MM
-                        retry_y = y + FORWARD_Y_COMP_2F
                         retry_z = target_z - RETRY_Z_DOWN_MM
+                        
+                        # y 방향 재시도 보정
+                        # 현재 y가 +면 더 안쪽/왼쪽으로, y가 -면 반대쪽으로 살짝 보정
+                        if y > 0:
+                            retry_y = y + FORWARD_Y_COMP_2F - RETRY_Y_SHIFT_MM
+                        elif y < 0:
+                            retry_y = y + FORWARD_Y_COMP_2F + RETRY_Y_SHIFT_MM
+                        else:
+                            retry_y = y + FORWARD_Y_COMP_2F
 
+                      
                         retry_pose = [retry_x, retry_y, retry_z, rx, ry, rz]
                         self._log(f"[2F RETRY] 재접근: {[round(v,1) for v in retry_pose]}")
                         self.mc.send_coords(retry_pose, DESCEND_SPEED, 1)
@@ -662,9 +671,18 @@ class PickNode(Node):
                             return
 
                         retry_x = x + RETRY_X_PUSH_MM
-                        retry_y = y + FORWARD_Y_COMP_2F
                         retry_z = target_z - RETRY_Z_DOWN_MM
+                        
+                        # y 방향 재시도 보정
+                        # 현재 y가 +면 더 안쪽/왼쪽으로, y가 -면 반대쪽으로 살짝 보정
+                        if y > 0:
+                            retry_y = y + FORWARD_Y_COMP_2F - RETRY_Y_SHIFT_MM
+                        elif y < 0:
+                            retry_y = y + FORWARD_Y_COMP_2F + RETRY_Y_SHIFT_MM
+                        else:
+                            retry_y = y + FORWARD_Y_COMP_2F
 
+                      
                         retry_pose = [retry_x, retry_y, retry_z, rx, ry, rz]
                         self._log(f"[2F RETRY] 재접근: {[round(v,1) for v in retry_pose]}")
                         self.mc.send_coords(retry_pose, DESCEND_SPEED, 1)
