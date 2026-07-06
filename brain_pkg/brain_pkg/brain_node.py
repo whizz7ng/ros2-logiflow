@@ -277,7 +277,25 @@ class BrainNode(Node):
             self.get_logger().info('/arm_status 발행: placed')
 
             self._finish_current_order()
+          
+          
+        elif status == 'realign_fail':
+            self.get_logger().warn('pick_node realign_fail 수신 - AGV 차체 보정 후 재관측 대기')
 
+            # realign_fail은 vision/J1 보정으로 해결 안 되니 AGV 재정차 루프로 넘김
+            # 단, 실제 AGV 이동은 /marker_agv_pose -> agv_align_node -> /agv_align 에서 이미 수행됨
+            # 여기서는 align_status step_done을 기다리기 위해 VISION 상태를 유지한다.
+            if self.state not in ('VISION', 'OBSERVING'):
+                self.get_logger().warn(
+                    f'realign_fail 수신했지만 현재 상태가 VISION/OBSERVING 아님: {self.state}'
+                )
+                return
+
+            self.state = 'VISION'
+            self._pub_state()
+            return
+
+      
         elif status == 'pick_failed':
             if self.state != 'PICKING':
                 self.get_logger().warn(
