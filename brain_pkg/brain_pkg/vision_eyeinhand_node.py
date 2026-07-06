@@ -183,6 +183,7 @@ class VisionNode(Node):
         }
         # 동적 T
         self.current_T_cam2base = None
+        self.have_fresh_observe_pose = False
 
         # ArUco 검출기 (마커 J1 보정용)
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(MARKER_DICT)
@@ -252,6 +253,7 @@ class VisionNode(Node):
             self.get_logger().warn(f'/observe_pose 6개 아님: {len(pose)}')
             return
         self.current_T_cam2base = _coords_to_matrix(pose) @ self.X_cam2gripper
+        self.have_fresh_observe_pose = True
         self.get_logger().info(
             f'[동적 T] 관측 자세 수신 → T 갱신: {[round(v, 1) for v in pose]}'
         )
@@ -494,6 +496,10 @@ class VisionNode(Node):
             self.not_found_count = 0
             self.cut_count = 0
             self.center_miss_count = 0
+            
+# 새 관측 시작마다 이전 observe_pose/T를 무효화
+self.current_T_cam2base = None
+self.have_fresh_observe_pose = False
             # 주의: realign_count는 여기서 리셋 안 함.
             # J1 보정 재관측도 observe_ready→vision_activate로 다시 오는데,
             # 여기서 리셋하면 3회 제한이 무효화되어 무한루프. 블록 찾을 때만 리셋.
@@ -527,6 +533,10 @@ class VisionNode(Node):
     def _detect_block(self):
         if self.depth_img is None or self.intrinsics is None:
             self.get_logger().warn('depth/intrinsic 아직 준비 안 됨')
+            return
+
+        if not getattr(self, "have_fresh_observe_pose", False):
+            self.get_logger().warn("[안전] fresh observe_pose 없음 - 좌표 계산 보류")
             return
 
         img = self.color_img.copy()
