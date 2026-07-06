@@ -638,25 +638,27 @@ class VisionNode(Node):
             self.get_logger().warn(
                 f'depth 없음 ({self.depth_fail_count}/{NOT_FOUND_LIMIT}) - ArUco 기반 차체교정 대기'
             )
-        
+
             # depth가 계속 없으면 ArUco 마커를 읽어서 AGV 보정 좌표 발행
             if self.depth_fail_count >= NOT_FOUND_LIMIT:
                 self.get_logger().warn('→ depth 연속 실패: ArUco 마커 기반 AGV 자세교정 요청')
-        
-                # 마커가 보이면 /marker_agv_pose 발행
-                self._publish_marker_agv()
+
+                poses = self._detect_markers_pose()
+
                 if not poses:
-                      self.get_logger().warn('depth 실패했지만 ArUco 마커도 안 보임 → realign_fail')
-                      self._emit_realign_fail()
-                  else:
-                      self._publish_marker_agv()
-        
+                    self.get_logger().warn('depth 실패했지만 ArUco 마커도 안 보임 → realign_fail')
+                    self._emit_realign_fail()
+                else:
+                    self._publish_marker_agv()
+
                 # brain/nav가 보정하도록, 현재 vision은 멈춤
                 self.mode = MODE_IDLE
                 self.depth_fail_count = 0
-        
+
             return
+
         self.depth_fail_count = 0
+      
         near = np.min(valid)
         block_face = valid[valid < near + 25]
 
