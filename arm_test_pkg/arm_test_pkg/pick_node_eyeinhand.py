@@ -75,6 +75,7 @@ GRIPPER_CLOSE = 30
 # =========================
 PICK_RETRY_MAX = 1
 GRIP_CHECK_MARGIN = 8
+GRIP_SUCCESS_THRESH = 35   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
 
 RETRY_X_PUSH_MM = 5.0       # 재시도 때 x를 조금 더 전진
 RETRY_Y_SHIFT_MM = 5.0      # 재시도 때 y도 살짝 보정
@@ -125,6 +126,7 @@ APPROACH_Z_MM = 30.0
 PICK_X_BIAS_MM = 13.0     # 이전: 12.0
 PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
+GRIPPER_Z_OFFSET_MM = 0.0   # place 시 z 보정 (eye-in-hand 재측정, 실측 조정)
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 45.0
@@ -197,6 +199,25 @@ class PickNode(Node):
         m.data = status
         self._pick_status_pub.publish(m)
         self.get_logger().info(f"/pick_status 발행: {status}")
+
+    def _check_gripped(self):
+        """그리퍼가 블록을 물었는지 확인.
+        값이 GRIPPER_CLOSE(30)까지 완전히 닫히면 빈 손,
+        블록 두께로 덜 닫혀 GRIP_SUCCESS_THRESH(33) 이상이면 물린 것."""
+        try:
+            val = self.mc.get_gripper_value()
+        except Exception as e:
+            self.get_logger().warn(f"get_gripper_value 실패: {e} - 파지된 걸로 간주")
+            return True
+        if val is None:
+            self.get_logger().warn("gripper_value None - 파지된 걸로 간주")
+            return True
+        gripped = val >= GRIP_SUCCESS_THRESH
+        self.get_logger().info(
+            f"[GRIP CHECK] gripper_value={val} (기준 {GRIP_SUCCESS_THRESH}) "
+            f"→ {'물림' if gripped else '빈손'}"
+        )
+        return gripped
 
     def _parse_coords(self, msg: Float32MultiArray):
         coords = [round(float(v), 2) for v in msg.data]
@@ -454,8 +475,8 @@ class PickNode(Node):
                 # 2층 (기존)
                 if y > 0:
                     y -= y * 0.13
-                elif y < 0:
-                     y += y * 0.2
+                # elif y < 0:
+                #     y += y * 0.0
                 
                   
             self.get_logger().info(
