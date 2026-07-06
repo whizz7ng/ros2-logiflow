@@ -246,7 +246,7 @@ class BrainNode(Node):
 
             self._finish_current_order()
           
-         elif msg.data == 'pick_failed':
+        elif msg.data == 'pick_failed':
             if self.state != 'PICKING':
                 self.get_logger().warn(
                     f'pick_failed 수신했지만 현재 상태가 PICKING이 아님: {self.state}'
