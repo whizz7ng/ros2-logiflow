@@ -70,8 +70,13 @@ class BrainNode(Node):
         self.current_order = None
         self.zone = None
         self.item = None
+        self.current_item = None
+        self.current_level = 1
         self.level = DEFAULT_LEVEL        # ===== [신규] 현재 주문의 층 =====
         self.emergency_active = False
+        # pick 실패 시 재관측 재시도 횟수
+        self.pick_retry_count = 0
+        self.PICK_REOBSERVE_MAX = 1   # 처음엔 1회 추천. 필요하면 2로 증가
 
         self.get_logger().info('brain_node 시작 - 상태: IDLE')
         self._pub_state()
@@ -126,6 +131,10 @@ class BrainNode(Node):
         self.current_order = self.order_queue.popleft()
         # ===== [변경] 층까지 파싱 =====
         self.item, self.zone, self.level = self._parse_order(self.current_order)
+      
+        # 새 주문 시작이므로 pick 재관측 retry 카운터 초기화
+        self.pick_retry_count = 0
+      
         self.get_logger().info(
             f'다음 주문 시작: {self.current_order}, '
             f'item={self.item}, zone={self.zone}, level={self.level}'
@@ -215,7 +224,10 @@ class BrainNode(Node):
                     f'pick done 수신했지만 현재 상태가 PICKING이 아님: {self.state}'
                 )
                 return
-
+        
+            # 픽 성공했으므로 재관측 retry 카운터 초기화
+            self.pick_retry_count = 0
+        
             self.state = 'NAV_TO_DEST'
             self._pub_state()
 
@@ -233,7 +245,40 @@ class BrainNode(Node):
             self.get_logger().info('/arm_status 발행: placed')
 
             self._finish_current_order()
+          
+         elif msg.data == 'pick_failed':
+            if self.state != 'PICKING':
+                self.get_logger().warn(
+                    f'pick_failed 수신했지만 현재 상태가 PICKING이 아님: {self.state}'
+                )
+                return
 
+            self.get_logger().warn('pick_failed 수신 - 재관측 retry 판단')
+
+            if self.pick_retry_count < self.PICK_REOBSERVE_MAX:
+                self.pick_retry_count += 1
+
+                self.get_logger().warn(
+                    f'재관측 재시도 {self.pick_retry_count}/{self.PICK_REOBSERVE_MAX}'
+                )
+
+                # 다시 관측 자세부터 시작
+                self.state = 'OBSERVING'
+                self._pub_state()
+
+                self._publish_string(self._observe_move_pub, str(self.level))
+                self.get_logger().info(
+                    f'/observe_move 재발행: level={self.level} (pick_failed 재관측)'
+                )
+                return
+
+            # 재시도 초과
+            self.get_logger().error('재관측 재시도 초과 - 픽 실패 처리')
+            self.pick_retry_count = 0
+            self.state = 'ERROR'
+            self._pub_state()
+            return
+      
         elif msg.data == 'error':
             self.get_logger().error('pick_node error 수신')
             self.state = 'ERROR'
