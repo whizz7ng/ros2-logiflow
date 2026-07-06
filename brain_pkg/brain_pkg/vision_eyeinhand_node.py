@@ -221,8 +221,8 @@ class VisionNode(Node):
         # [마커 J1 보정] 발행: "층:J1보정량" (예 "1:8.5"), 또는 "realign_fail"
         self._j1_corr_pub        = self.create_publisher(String, '/j1_correction', 10)
         # [AGV 보정] 마커의 AGV 기준 좌표 발행 (팔로 못 잡을 때 AGV 움직이라고).
-        # 형식: [left_x, left_y, right_x, right_y] (mm, AGV base 기준).
-        # 안 보이는 마커는 해당 값을 NaN으로.
+        # 형식: [level, left_x, left_y, right_x, right_y] (mm, AGV base 기준).
+        # 안 보이는 마커는 해당 값을 NaN으로. level로 보정 노드가 층별 목표 선택.
         self._marker_agv_pub     = self.create_publisher(Float32MultiArray, '/marker_agv_pose', 10)
 
         self.get_logger().info('vision_node 시작 (eye-in-hand / 동적 T / 거리판정)')
@@ -322,25 +322,26 @@ class VisionNode(Node):
 
     def _publish_marker_agv(self):
         """AGV 보정용: 두 마커의 AGV 기준 좌표 발행.
-        realign_fail 등 '팔로 못 잡음' 상황에서 호출.
-        형식 [Lx, Ly, Rx, Ry] (mm). 안 보이는 마커는 NaN."""
+        realign_fail / too_far / too_close 등 '팔로 못 잡음' 상황에서 호출.
+        형식 [level, Lx, Ly, Rx, Ry] (mm). 안 보이는 마커는 NaN.
+        level을 넣어 보정 노드가 층별 목표와 비교하게 함."""
         poses = self._detect_markers_pose()
         nan = float('nan')
-        vals = [nan, nan, nan, nan]  # Lx, Ly, Rx, Ry
+        vals = [float(self.shelf_level), nan, nan, nan, nan]  # level, Lx, Ly, Rx, Ry
         if MARKER_ID_LEFT in poses:
             agv = self._marker_to_agv(poses[MARKER_ID_LEFT])
             if agv is not None:
-                vals[0], vals[1] = agv[0], agv[1]
+                vals[1], vals[2] = agv[0], agv[1]
         if MARKER_ID_RIGHT in poses:
             agv = self._marker_to_agv(poses[MARKER_ID_RIGHT])
             if agv is not None:
-                vals[2], vals[3] = agv[0], agv[1]
+                vals[3], vals[4] = agv[0], agv[1]
         m = Float32MultiArray()
         m.data = [float(v) for v in vals]
         self._marker_agv_pub.publish(m)
         self.get_logger().info(
-            f'[AGV보정] 마커 AGV 좌표 발행: L=({vals[0]:.0f},{vals[1]:.0f}) '
-            f'R=({vals[2]:.0f},{vals[3]:.0f})'
+            f'[AGV보정] 마커 AGV 좌표 발행 (L{self.shelf_level}): '
+            f'L=({vals[1]:.0f},{vals[2]:.0f}) R=({vals[3]:.0f},{vals[4]:.0f})'
         )
 
     def _emit_realign_fail(self):
