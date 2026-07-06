@@ -25,6 +25,7 @@ agv_align_node.py  -  AGV 정렬 보정 노드 (층별 목표)
 
 import math
 
+import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
@@ -75,7 +76,19 @@ class AgvAlignNode(Node):
         self.get_logger().warn(
             'TARGET 목표값이 아직 0. 각 층 정상 정차에서 /marker_agv_pose 재서 채울 것!'
         )
+        self.active_cmd = Twist()
+        self.cmd_until = 0.0
+        self.align_timer = self.create_timer(0.05, self._timer_callback)  # 20Hz
+        self.PULSE_SEC = 0.25   # 처음엔 0.2~0.3초 추천
 
+    def _timer_callback(self):
+        now = time.time()
+    
+        if now < self.cmd_until:
+            self._align_pub.publish(self.active_cmd)
+        else:
+            self._align_pub.publish(Twist())
+  
     def _marker_callback(self, msg: Float32MultiArray):
         data = list(msg.data)
         if len(data) != 5:
@@ -139,6 +152,7 @@ class AgvAlignNode(Node):
         tw.linear.y = float(vy)
         tw.angular.z = float(wz)
         self._align_pub.publish(tw)
+        self.cmd_until = time.time() + self.PULSE_SEC
 
         self.get_logger().info(
             f'[정렬] L{level} err(x={err_x:.0f} y={err_y:.0f} yaw={err_yaw:.0f}) '
