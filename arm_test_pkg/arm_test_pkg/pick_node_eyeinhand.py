@@ -476,7 +476,7 @@ class PickNode(Node):
                 if y > 0:
                     y -= y * 0.13
                 elif y < 0:
-                    y += y * -0.10
+                    y += y * 0.10
                 
                   
             self.get_logger().info(
