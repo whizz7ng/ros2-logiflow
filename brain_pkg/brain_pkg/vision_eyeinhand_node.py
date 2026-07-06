@@ -119,6 +119,12 @@ MARKER_REALIGN_MAX = 1
 # 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
 NOT_FOUND_LIMIT = 15
 
+# ===== [AGV 보정용] 팔 g_base → AGV base_link 오프셋 (실측, mm) =====
+# 팔이 AGV 정중앙에 정면(yaw=0)으로 달림. 팔 base가 AGV 중심보다:
+#   x(앞뒤) +75mm 앞, y(좌우) 0, z(높이) +135mm 위.
+# yaw=0이라 회전 없이 오프셋만 더하면 팔base 좌표 → AGV 좌표.
+GBASE_TO_AGV_OFFSET = (75.0, 0.0, 135.0)   # (x, y, z) mm
+
 #===== [블록 중심 보정] =====
 # bbox가 잘리진 않았지만 블록 중심이 화면 중앙에서 많이 벗어나면 J1 보정
 BLOCK_CENTER_MIN_X = 220
@@ -211,6 +217,10 @@ class VisionNode(Node):
         self._dist_status_pub    = self.create_publisher(String, '/distance_status', 10)
         # [마커 J1 보정] 발행: "층:J1보정량" (예 "1:8.5"), 또는 "realign_fail"
         self._j1_corr_pub        = self.create_publisher(String, '/j1_correction', 10)
+        # [AGV 보정] 마커의 AGV 기준 좌표 발행 (팔로 못 잡을 때 AGV 움직이라고).
+        # 형식: [left_x, left_y, right_x, right_y] (mm, AGV base 기준).
+        # 안 보이는 마커는 해당 값을 NaN으로.
+        self._marker_agv_pub     = self.create_publisher(Float32MultiArray, '/marker_agv_pose', 10)
 
         self.get_logger().info('vision_node 시작 (eye-in-hand / 동적 T / 거리판정)')
 
@@ -273,6 +283,69 @@ class VisionNode(Node):
             result[int(mid)] = px
         return result
 
+    def _detect_markers_pose(self):
+        """좌우 마커의 3D pose(카메라 기준 tvec) 검출.
+        → {id: tvec(np.array [x,y,z] m)}. 없으면 빈 dict."""
+        if self.color_img is None or self.intrinsics is None:
+            return {}
+        fx, fy, ppx, ppy = self.intrinsics
+        K = np.array([[fx, 0, ppx], [0, fy, ppy], [0, 0, 1]], dtype=np.float64)
+        dist = np.zeros(5)
+        if self._aruco_new:
+            corners, ids, _ = self.aruco_detector.detectMarkers(self.color_img)
+        else:
+            corners, ids, _ = cv2.aruco.detectMarkers(
+                self.color_img, self.aruco_dict, parameters=self.aruco_params)
+        result = {}
+        if ids is None:
+            return result
+        for i, mid in enumerate(ids.flatten()):
+            _, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(
+                [corners[i]], MARKER_LENGTH, K, dist)
+            result[int(mid)] = tvec[0][0]   # [x, y, z] (m)
+        return result
+
+    def _marker_to_agv(self, tvec_m):
+        """마커 tvec(카메라 기준, m) → AGV base 기준 좌표(mm).
+        동적 T로 팔base 좌표 구한 뒤, static 오프셋(+75,0,+135) 더함 (yaw=0)."""
+        T = self._current_T()
+        if T is None:
+            return None
+        cam_pt = np.array([tvec_m[0]*1000.0, tvec_m[1]*1000.0, tvec_m[2]*1000.0, 1.0])
+        base_pt = (T @ cam_pt)[:3]   # 팔 g_base 기준 (mm)
+        ox, oy, oz = GBASE_TO_AGV_OFFSET
+        agv = [float(base_pt[0] + ox), float(base_pt[1] + oy), float(base_pt[2] + oz)]
+        return agv
+
+    def _publish_marker_agv(self):
+        """AGV 보정용: 두 마커의 AGV 기준 좌표 발행.
+        realign_fail 등 '팔로 못 잡음' 상황에서 호출.
+        형식 [Lx, Ly, Rx, Ry] (mm). 안 보이는 마커는 NaN."""
+        poses = self._detect_markers_pose()
+        nan = float('nan')
+        vals = [nan, nan, nan, nan]  # Lx, Ly, Rx, Ry
+        if MARKER_ID_LEFT in poses:
+            agv = self._marker_to_agv(poses[MARKER_ID_LEFT])
+            if agv is not None:
+                vals[0], vals[1] = agv[0], agv[1]
+        if MARKER_ID_RIGHT in poses:
+            agv = self._marker_to_agv(poses[MARKER_ID_RIGHT])
+            if agv is not None:
+                vals[2], vals[3] = agv[0], agv[1]
+        m = Float32MultiArray()
+        m.data = [float(v) for v in vals]
+        self._marker_agv_pub.publish(m)
+        self.get_logger().info(
+            f'[AGV보정] 마커 AGV 좌표 발행: L=({vals[0]:.0f},{vals[1]:.0f}) '
+            f'R=({vals[2]:.0f},{vals[3]:.0f})'
+        )
+
+    def _emit_realign_fail(self):
+        """팔로 못 잡음 → realign_fail 발행 + 마커 AGV 좌표 발행 (AGV 보정용)."""
+        self._j1_corr_pub.publish(String(data='realign_fail'))
+        self._publish_marker_agv()   # AGV가 움직이도록 마커 AGV 좌표 제공
+        self.realign_count = 0
+
     def _try_marker_realign(self):
         """블록 안 보일 때: 개별 마커 기준으로 J1 보정량 계산해서 /j1_correction 발행.
         - 보이는 마커가 자기 기준 픽셀에서 벗어난 만큼 J1 보정 (한쪽만 보여도 됨).
@@ -283,15 +356,14 @@ class VisionNode(Node):
             self.get_logger().error(
                 f'[마커보정] {MARKER_REALIGN_MAX}회 반복해도 못 찾음 → realign_fail (AGV 재정차)'
             )
-            self._j1_corr_pub.publish(String(data='realign_fail'))
-            self.realign_count = 0
+            self._emit_realign_fail()
             return
 
         markers = self._detect_markers()
         ref = MARKER_REF_PX.get(self.shelf_level, {})
         if not ref:
             self.get_logger().error(f'[마커보정] 층 {self.shelf_level} 기준 없음')
-            self._j1_corr_pub.publish(String(data='realign_fail'))
+            self._emit_realign_fail()
             return
 
         # 보이는 마커 각각의 보정량 계산
@@ -307,8 +379,7 @@ class VisionNode(Node):
 
         if not corrections:
             self.get_logger().warn('[마커보정] 마커 안 보임 → realign_fail (AGV 재정차)')
-            self._j1_corr_pub.publish(String(data='realign_fail'))
-            self.realign_count = 0
+            self._emit_realign_fail()
             return
 
         # 양쪽이면 평균, 한쪽이면 그거
@@ -322,8 +393,7 @@ class VisionNode(Node):
                 f'[마커보정] 보정량 {j1_corr:.1f}도 > 한계 {J1_CORRECTION_MAX} '
                 f'→ realign_fail (AGV 재정차)'
             )
-            self._j1_corr_pub.publish(String(data='realign_fail'))
-            self.realign_count = 0
+            self._emit_realign_fail()
             return
 
         self.realign_count += 1
@@ -347,8 +417,7 @@ class VisionNode(Node):
                 f'[블록중심보정] {BLOCK_CENTER_REALIGN_MAX}회 보정 후에도 중앙 정렬 실패 '
                 f'→ realign_fail (AGV 재정차)'
             )
-            self._j1_corr_pub.publish(String(data='realign_fail'))
-            self.realign_count = 0
+            self._emit_realign_fail()
             return
 
         offset_px = cx - BLOCK_CENTER_TARGET_X
@@ -364,8 +433,7 @@ class VisionNode(Node):
                 f'[블록중심보정] 보정량 {j1_corr:.1f}도 > 한계 {BLOCK_CENTER_CORRECTION_MAX} '
                 f'→ realign_fail (AGV 재정차)'
             )
-            self._j1_corr_pub.publish(String(data='realign_fail'))
-            self.realign_count = 0
+            self._emit_realign_fail()
             return
 
         self.realign_count += 1
