@@ -492,14 +492,18 @@ class VisionNode(Node):
 
             self.target_item = item
             self.shelf_level = level
+
+            # 새 관측 시작마다 이전 observe_pose/T를 무효화
+            self.current_T_cam2base = None
+            self.have_fresh_observe_pose = False
+            # 주의: realign_count는 여기서 리셋 안 함.
+          
             self.mode = MODE_BLOCK
             self.not_found_count = 0
             self.cut_count = 0
             self.center_miss_count = 0
             
-# 새 관측 시작마다 이전 observe_pose/T를 무효화
-self.current_T_cam2base = None
-self.have_fresh_observe_pose = False
+           
             # 주의: realign_count는 여기서 리셋 안 함.
             # J1 보정 재관측도 observe_ready→vision_activate로 다시 오는데,
             # 여기서 리셋하면 3회 제한이 무효화되어 무한루프. 블록 찾을 때만 리셋.
