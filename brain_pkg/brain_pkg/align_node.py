@@ -57,12 +57,12 @@ GAIN_YAW = 0.004
 
 # ===== 동료 bridge 제한에 맞춘 출력 속도 =====
 # bridge에서 max_vx=0.030, max_vy=0.030, max_wz=0.150으로 잘림
-ALIGN_VX = 0.03
-ALIGN_VY = 0.03
+ALIGN_VX = 0.10
+ALIGN_VY = 0.06
 
 # safety_filter의 INPLACE_SMALL_TURN 감지 범위가 0.010~0.080이므로
 # yaw는 일부러 작게 오래 보냄
-ALIGN_WZ_SMALL = 0.06
+ALIGN_WZ = 0.35
 
 # 부호가 반대로 움직이면 여기만 -1.0으로 바꾸면 됨
 SIGN_X = 1.0
@@ -76,9 +76,9 @@ TOL_YAW = 8.0
 STOP_REPEAT = 3
 
 # ===== 축별 펄스 시간 =====
-PULSE_X_SEC   = 1.00
-PULSE_Y_SEC   = 0.80
-PULSE_YAW_SEC = 0.90
+PULSE_X_SEC   = 0.50
+PULSE_Y_SEC   = 0.45
+PULSE_YAW_SEC = 0.40
 
 CMD_HZ = 20
 
@@ -251,9 +251,9 @@ class AgvAlignNode(Node):
         
             raw_wz = GAIN_YAW * err_yaw
             if raw_wz > 0:
-                tw.angular.z = SIGN_YAW * ALIGN_WZ_SMALL
+                tw.angular.z = SIGN_YAW * ALIGN_WZ
             else:
-                tw.angular.z = -SIGN_YAW * ALIGN_WZ_SMALL
+                tw.angular.z = -SIGN_YAW * ALIGN_WZ
         
             pulse_sec = PULSE_YAW_SEC
         
