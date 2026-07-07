@@ -93,7 +93,7 @@ class BrainNode(Node):
 
         # ===== [신규] AGV 차체 보정 재관측 제한 =====
         self.align_retry_count = 0
-        self.ALIGN_RETRY_MAX = 3
+        self.ALIGN_RETRY_MAX = 8
 
         # ===== [신규] pick 실패 시 재관측 제한 =====
         self.pick_retry_count = 0
