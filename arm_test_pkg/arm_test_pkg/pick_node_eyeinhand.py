@@ -181,6 +181,14 @@ class PickNode(Node):
         self.mc = MyCobot280(SERIAL_PORT, BAUD)
         time.sleep(0.5)
 
+        # 그리퍼 초기화 (get_gripper_value가 값을 주려면 필수, 안 하면 None)
+        try:
+            self.mc.init_gripper()
+            time.sleep(1.0)
+            self.get_logger().info("그리퍼 초기화 완료")
+        except Exception as e:
+            self.get_logger().warn(f"그리퍼 초기화 실패: {e}")
+
         # 시작 시 홈 포지션 이동
         self.get_logger().info("홈포지션으로 이동 중...")
         try:
@@ -208,16 +216,23 @@ class PickNode(Node):
 
     def _check_gripped(self):
         """그리퍼가 블록을 물었는지 확인.
-        값이 GRIPPER_CLOSE(30)까지 완전히 닫히면 빈 손,
-        블록 두께로 덜 닫혀 GRIP_SUCCESS_THRESH(33) 이상이면 물린 것."""
-        try:
-            val = self.mc.get_gripper_value()
-        except Exception as e:
-            self.get_logger().warn(f"get_gripper_value 실패: {e} - 파지된 걸로 간주")
-            return True
+        빈손 완전 닫힘 ≈ 9, 블록 물면 두께만큼 덜 닫혀 값이 큼.
+        GRIP_SUCCESS_THRESH 이상이면 물린 것."""
+        val = None
+        for _ in range(5):   # None 방지: 여러 번 읽어 값 확보
+            try:
+                v = self.mc.get_gripper_value()
+            except Exception as e:
+                self.get_logger().warn(f"get_gripper_value 예외: {e}")
+                v = None
+            if v is not None:
+                val = v
+                break
+            time.sleep(0.2)
         if val is None:
-            self.get_logger().warn("gripper_value None - 파지된 걸로 간주")
-            return True
+            # 값을 못 읽으면 안전하게 '실패'로 봐서 재시도 유도
+            self.get_logger().warn("gripper_value 계속 None - 파지 실패로 간주")
+            return False
         gripped = val >= GRIP_SUCCESS_THRESH
         self.get_logger().info(
             f"[GRIP CHECK] gripper_value={val} (기준 {GRIP_SUCCESS_THRESH}) "
