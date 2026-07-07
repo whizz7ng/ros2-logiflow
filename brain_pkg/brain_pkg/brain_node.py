@@ -19,14 +19,21 @@ brain_node.py  (eye-in-hand 관측 흐름 + AGV align 재관측 + pick_failed �
   이동이 끝나면 agv_align_node가 /align_status "step_done"을 발행한다.
   brain_node는 step_done을 받으면 다시 /observe_move부터 시작해서 새 관측을 수행한다.
 
+[AGV align 안정화 추가]
+  /distance_status too_close/too_far 를 받은 경우에만
+  /align_status step_done을 유효한 보정 완료 신호로 처리한다.
+  /distance_status ok 이후 뒤늦게 들어오는 step_done은 무시한다.
+  이렇게 해야 /box_pose와 /align_status가 거의 동시에 들어올 때 FSM이 꼬이지 않는다.
+
 [pick_failed 변경 요약]
   pick_node가 파지 실패 시 /pick_status "pick_failed"를 발행하면,
   brain_node는 바로 ERROR로 가지 않고 observe_move부터 한 번 더 재관측한다.
 
 새 토픽:
-  /observe_move  (String) brain -> pick : 관측할 층 번호 "1"/"2"
-  /observe_ready (String) pick -> brain : 관측 자세 도착 완료 "ready"
-  /align_status  (String) agv_align -> brain : AGV 보정 1스텝 완료 "step_done"
+  /observe_move    (String) brain -> pick : 관측할 층 번호 "1"/"2"
+  /observe_ready   (String) pick -> brain : 관측 자세 도착 완료 "ready"
+  /distance_status (String) vision -> brain : 거리 상태 "ok:311" / "too_close:239" / "too_far:360"
+  /align_status    (String) agv_align -> brain : AGV 보정 1스텝 완료 "step_done", 정렬완료 "aligned"
 """
 
 from collections import deque
@@ -58,6 +65,10 @@ class BrainNode(Node):
         self.create_subscription(String, '/pick_status', self._pick_status_callback, 10)
         self.create_subscription(String, '/nav_status', self._nav_status_callback, 10)
         self.create_subscription(String, '/emergency_stop', self._emergency_stop_callback, 10)
+
+        # ===== [신규] vision_node의 거리 상태 =====
+        # too_close/too_far일 때만 AGV align step_done을 유효하게 처리하기 위함
+        self.create_subscription(String, '/distance_status', self._distance_status_callback, 10)
 
         # ===== [신규] pick_node의 관측 자세 도착 신호 =====
         self.create_subscription(String, '/observe_ready', self._observe_ready_callback, 10)
@@ -98,6 +109,11 @@ class BrainNode(Node):
         # ===== [신규] pick 실패 시 재관측 제한 =====
         self.pick_retry_count = 0
         self.PICK_REOBSERVE_MAX = 1
+
+        # ===== [신규] 현재 AGV 차체 보정 step_done을 기다리는 중인지 =====
+        # True일 때만 /align_status step_done을 처리한다.
+        # False면 이전 step_done이 늦게 들어온 것으로 보고 무시한다.
+        self.waiting_align_step = False
 
         self.get_logger().info('brain_node 시작 - 상태: IDLE')
         self._pub_state()
@@ -159,6 +175,7 @@ class BrainNode(Node):
         # 새 주문 시작 시 보정/재시도 카운터 초기화
         self.align_retry_count = 0
         self.pick_retry_count = 0
+        self.waiting_align_step = False
 
         self.get_logger().info(
             f'다음 주문 시작: {self.current_order}, '
@@ -186,6 +203,7 @@ class BrainNode(Node):
         self.level = DEFAULT_LEVEL
         self.align_retry_count = 0
         self.pick_retry_count = 0
+        self.waiting_align_step = False
 
         if self.order_queue:
             self.get_logger().info(
@@ -218,6 +236,46 @@ class BrainNode(Node):
                 f'대기 주문 수: {len(self.order_queue)}'
             )
 
+    def _distance_status_callback(self, msg):
+        """
+        vision_node의 거리 판정 결과 수신.
+        - too_close / too_far: vision이 /marker_agv_pose를 발행했고,
+          align_node가 AGV 보정을 수행할 예정이므로 step_done을 기다린다.
+        - ok: 정상 파지 가능 거리이므로 box_pose를 받아야 한다.
+          이때 늦게 들어오는 step_done은 무시해야 한다.
+        """
+        if self.emergency_active:
+            self.get_logger().warn(
+                f'/distance_status 수신했지만 비상정지 상태라 무시: {msg.data}'
+            )
+            return
+
+        status = msg.data.strip()
+        self.get_logger().info(f'/distance_status 수신: {status}')
+
+        head = status.split(':', 1)[0]
+
+        if head in ('too_close', 'too_far'):
+            if self.state == 'VISION':
+                self.waiting_align_step = True
+                self.get_logger().warn(
+                    f'거리 보정 필요({status}) → /align_status step_done 대기'
+                )
+            else:
+                self.get_logger().warn(
+                    f'거리 보정 상태({status}) 수신했지만 현재 상태가 VISION 아님: {self.state}'
+                )
+            return
+
+        if head == 'ok':
+            # 정상 거리면 곧 /box_pose가 들어올 가능성이 크다.
+            # 이전 align step_done이 뒤늦게 들어와도 무시하도록 플래그를 끈다.
+            self.waiting_align_step = False
+            self.get_logger().info('거리 ok → /box_pose 대기, 늦은 align step_done은 무시')
+            return
+
+        self.get_logger().warn(f'알 수 없는 distance_status: {status}')
+
     def _box_pose_callback(self, msg):
         if self.emergency_active:
             self.get_logger().warn('/box_pose 수신했지만 비상정지 상태라 무시')
@@ -233,6 +291,7 @@ class BrainNode(Node):
 
         # 정상 좌표를 받았으므로 align retry는 성공적으로 종료
         self.align_retry_count = 0
+        self.waiting_align_step = False
 
         self.state = 'PICKING'
         self._pub_state()
@@ -277,8 +336,7 @@ class BrainNode(Node):
             self.get_logger().info('/arm_status 발행: placed')
 
             self._finish_current_order()
-          
-          
+
         elif status == 'realign_fail':
             self.get_logger().warn('pick_node realign_fail 수신 - AGV 차체 보정 후 재관측 대기')
 
@@ -292,10 +350,10 @@ class BrainNode(Node):
                 return
 
             self.state = 'VISION'
+            self.waiting_align_step = True
             self._pub_state()
             return
 
-      
         elif status == 'pick_failed':
             if self.state != 'PICKING':
                 self.get_logger().warn(
@@ -314,6 +372,7 @@ class BrainNode(Node):
 
                 # 다시 관측 자세부터 시작
                 self.state = 'OBSERVING'
+                self.waiting_align_step = False
                 self._pub_state()
 
                 self._publish_string(self._observe_move_pub, str(self.level))
@@ -325,12 +384,14 @@ class BrainNode(Node):
             # 재시도 초과
             self.get_logger().error('pick 재관측 재시도 초과 - 픽 실패 처리')
             self.pick_retry_count = 0
+            self.waiting_align_step = False
             self.state = 'ERROR'
             self._pub_state()
             return
 
         elif status == 'error':
             self.get_logger().error('pick_node error 수신')
+            self.waiting_align_step = False
             self.state = 'ERROR'
             self._pub_state()
 
@@ -355,6 +416,7 @@ class BrainNode(Node):
 
             # ===== [변경] eye-in-hand: 바로 vision 켜지 않고 관측 자세부터 이동 =====
             self.state = 'OBSERVING'
+            self.waiting_align_step = False
             self._pub_state()
 
             self._publish_string(self._observe_move_pub, str(self.level))
@@ -370,6 +432,7 @@ class BrainNode(Node):
                 return
 
             self.state = 'PLACING'
+            self.waiting_align_step = False
             self._pub_state()
 
             zone = self.zone if self.zone else 'A'
@@ -402,6 +465,7 @@ class BrainNode(Node):
             self.level = DEFAULT_LEVEL
             self.align_retry_count = 0
             self.pick_retry_count = 0
+            self.waiting_align_step = False
             self._pub_state()
 
             if self.order_queue:
@@ -447,8 +511,39 @@ class BrainNode(Node):
         status = msg.data.strip()
         self.get_logger().info(f'/align_status 수신: {status}')
 
+        if status == 'aligned':
+            # aligned는 align_node가 "오차 허용범위 안"이라고 판단했다는 뜻.
+            # 기존 brain 구조에서는 다시 관측 자세에서 블록 검출을 한 번 더 수행한다.
+            self.waiting_align_step = False
+            self.align_retry_count = 0
+
+            if self.state != 'VISION':
+                self.get_logger().warn(
+                    f'align aligned 수신했지만 현재 상태가 VISION이 아님: {self.state}'
+                )
+                return
+
+            self.get_logger().info('AGV 차체 보정 완료 aligned → 재관측 후 블록 검출')
+
+            self.state = 'OBSERVING'
+            self._pub_state()
+
+            self._publish_string(self._observe_move_pub, str(self.level))
+            self.get_logger().info(
+                f'/observe_move 재발행: level={self.level} (AGV align 완료 후 재관측)'
+            )
+            return
+
         if status != 'step_done':
             self.get_logger().warn(f'알 수 없는 align_status: {status}')
+            return
+
+        # ===== [핵심 수정] 실제로 AGV 보정을 기다리는 중일 때만 step_done 처리 =====
+        if not self.waiting_align_step:
+            self.get_logger().warn(
+                'align step_done 수신했지만 waiting_align_step=False '
+                '→ 늦은/불필요한 step_done으로 보고 무시'
+            )
             return
 
         # 차체 보정은 vision 단계에서만 의미 있음
@@ -457,6 +552,9 @@ class BrainNode(Node):
                 f'align step_done 수신했지만 현재 상태가 VISION이 아님: {self.state}'
             )
             return
+
+        # 이번 step_done은 처리했으므로 플래그 해제
+        self.waiting_align_step = False
 
         if self.align_retry_count >= self.ALIGN_RETRY_MAX:
             self.get_logger().error('AGV 차체 보정 반복 초과 → ERROR')
@@ -500,6 +598,7 @@ class BrainNode(Node):
 
         self.emergency_active = True
         self.state = 'EMERGENCY_STOP'
+        self.waiting_align_step = False
         self._pub_state()
 
         self._publish_string(self._vision_activate_pub, 'stop')
@@ -520,6 +619,7 @@ class BrainNode(Node):
         self.level = DEFAULT_LEVEL
         self.align_retry_count = 0
         self.pick_retry_count = 0
+        self.waiting_align_step = False
         self.state = 'IDLE'
         self._pub_state()
 
@@ -537,7 +637,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
