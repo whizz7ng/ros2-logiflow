@@ -124,7 +124,7 @@ APPROACH_Z_MM = 30.0
 # 순수 calib 정확도부터 확인(vision arm_xyz 로그 vs 실제 블록 위치)한 뒤,
 # 빗나가는 만큼만 아래를 채울 것.
 PICK_X_BIAS_MM = 0.0     # 이전: 12.0
-PICK_Y_BIAS_MM = -26.0     # 이전: -26.0
+PICK_Y_BIAS_MM = -16.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 GRIPPER_Z_OFFSET_MM = 0.0   # place 시 z 보정 (eye-in-hand 재측정, 실측 조정)
 
