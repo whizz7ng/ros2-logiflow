@@ -470,13 +470,13 @@ class PickNode(Node):
                 if y > 0:
                     y -= y * 0.130      # 1층 왼쪽 계수
                 elif y < 0:
-                    y += y * 0.155      # 1층 오른쪽 계수
+                    y += y * 0.150      # 1층 오른쪽 계수
             else:
                 # 2층 (기존)
                 if y > 0:
-                    y -= y * 0.130
+                    y -= y * 0.127
                 elif y < 0:
-                    y += y * 0.110
+                    y += y * 0.108
                 
                   
             self.get_logger().info(
