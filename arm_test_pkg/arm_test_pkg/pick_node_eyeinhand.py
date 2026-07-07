@@ -468,15 +468,15 @@ class PickNode(Node):
             if self.current_level == 1:
                 # 1층 전용 y보정
                 if y > 0:
-                    y -= y * 0.13      # 1층 왼쪽 계수
+                    y -= y * 0.130      # 1층 왼쪽 계수
                 elif y < 0:
-                    y += y * 0.15      # 1층 오른쪽 계수
+                    y += y * 0.155      # 1층 오른쪽 계수
             else:
                 # 2층 (기존)
                 if y > 0:
-                    y -= y * 0.13
+                    y -= y * 0.130
                 elif y < 0:
-                    y += y * 0.11
+                    y += y * 0.110
                 
                   
             self.get_logger().info(
