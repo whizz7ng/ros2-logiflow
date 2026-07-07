@@ -49,29 +49,38 @@ TARGET = {
     2: {'lx': 497.0, 'ly': 121.3, 'rx': 491.0, 'ry': -122.2},   # 2층 (실측)
 }
 
-# ===== 제어 게인 (벗어남 mm → 속도, 실측하며 튜닝) =====
-GAIN_X   = 0.0008   # 앞뒤: mm당 m/s
-GAIN_Y   = 0.0008   # 좌우: mm당 m/s
-GAIN_YAW = 0.004    # 회전: (좌우마커 y차이 mm)당 rad/s
+# ===== 제어 게인 =====
+# 현재 bridge/safety_filter 구조에서는 속도 크기보다 부호 판단용에 가까움
+GAIN_X   = 0.0008
+GAIN_Y   = 0.0008
+GAIN_YAW = 0.004
 
-# ===== 속도 제한 (m/s, rad/s) =====
-# 처음에는 낮게 시작. 너무 적게 움직이면 조금씩 올리고, 튀면 낮춘다.
-MIN_LIN = 0.09
-MAX_LIN = 0.15
+# ===== 동료 bridge 제한에 맞춘 출력 속도 =====
+# bridge에서 max_vx=0.030, max_vy=0.030, max_wz=0.150으로 잘림
+ALIGN_VX = 0.03
+ALIGN_VY = 0.03
 
-MIN_ANG = 0.45
-MAX_ANG = 0.50
+# safety_filter의 INPLACE_SMALL_TURN 감지 범위가 0.010~0.080이므로
+# yaw는 일부러 작게 오래 보냄
+ALIGN_WZ_SMALL = 0.06
+
+# 부호가 반대로 움직이면 여기만 -1.0으로 바꾸면 됨
+SIGN_X = 1.0
+SIGN_Y = 1.0
+SIGN_YAW = 1.0
 
 # ===== 정렬 완료 허용 오차 =====
-TOL_XY  = 10.0      # mm
-TOL_YAW = 8.0       # mm (좌우마커 y차이)
+TOL_XY  = 10.0
+TOL_YAW = 8.0
 
-STOP_REPEAT = 3     # 정렬 완료 후 정지 명령 반복
+STOP_REPEAT = 3
 
-# ===== [펄스 이동 설정] =====
-# marker_agv_pose 1회 수신 → PULSE_SEC 동안만 /agv_align 반복 발행 → 자동 정지
-PULSE_SEC = 0.40    # 처음엔 0.20~0.30 추천
-CMD_HZ = 20         # /agv_align 반복 발행 주기
+# ===== 축별 펄스 시간 =====
+PULSE_X_SEC   = 1.00
+PULSE_Y_SEC   = 0.80
+PULSE_YAW_SEC = 0.90
+
+CMD_HZ = 20
 
 
 def _clamp(v, lo, hi):
@@ -220,30 +229,90 @@ class AgvAlignNode(Node):
 
         self._aligned_stop_sent = 0
 
-        # ---- cmd_vel 계산 (부호는 실측하며 맞출 것) ----
-        raw_vx = GAIN_X * err_x
-        raw_vy = GAIN_Y * err_y
-        raw_wz = GAIN_YAW * err_yaw
+        # ---- 이미 pulse 중이면 새 marker 값은 무시 ----
+        # 이동 중 카메라 흔들림으로 값이 계속 갱신되는 걸 막기 위함
+        if self._step_active and time.time() < self.cmd_until:
+            return
         
-        vx = _apply_min_max(raw_vx, MIN_LIN, MAX_LIN)
-        vy = _apply_min_max(raw_vy, MIN_LIN, MAX_LIN)
-        wz = _apply_min_max(raw_wz, MIN_ANG, MAX_ANG)
-
+        # ---- 현재 bridge/safety_filter에 맞춘 축 분리 제어 ----
+        # 중요:
+        #   1) yaw는 yaw만 보냄
+        #   2) x는 x만 보냄
+        #   3) y는 y만 보냄
+        #   4) x/y/yaw를 동시에 보내지 않음
         tw = Twist()
-        tw.linear.x = float(vx)
-        tw.linear.y = float(vy)
-        tw.angular.z = float(wz)
-
-        # ===== [중요 변경] 바로 1회 publish하지 않고, 일정 시간 pulse 이동 =====
+        axis = 'none'
+        pulse_sec = 0.0
+        
+        # 1순위: yaw
+        # 두 마커가 모두 보일 때만 yaw 보정 가능
+        if has_left and has_right and abs(err_yaw) >= TOL_YAW:
+            axis = 'yaw'
+        
+            raw_wz = GAIN_YAW * err_yaw
+            if raw_wz > 0:
+                tw.angular.z = SIGN_YAW * ALIGN_WZ_SMALL
+            else:
+                tw.angular.z = -SIGN_YAW * ALIGN_WZ_SMALL
+        
+            pulse_sec = PULSE_YAW_SEC
+        
+        # 2순위: 앞뒤 x
+        elif abs(err_x) >= TOL_XY:
+            axis = 'x'
+        
+            raw_vx = GAIN_X * err_x
+            if raw_vx > 0:
+                tw.linear.x = SIGN_X * ALIGN_VX
+            else:
+                tw.linear.x = -SIGN_X * ALIGN_VX
+        
+            pulse_sec = PULSE_X_SEC
+        
+            if tw.linear.x < 0.0:
+                self.get_logger().warn(
+                    '[정렬] vx 음수 명령 필요. '
+                    '하지만 동료 safety_filter의 block_reverse=True면 실제 /cmd_vel에서 0으로 막힐 수 있음.'
+                )
+        
+        # 3순위: 좌우 y
+        elif abs(err_y) >= TOL_XY:
+            axis = 'y'
+        
+            raw_vy = GAIN_Y * err_y
+            if raw_vy > 0:
+                tw.linear.y = SIGN_Y * ALIGN_VY
+            else:
+                tw.linear.y = -SIGN_Y * ALIGN_VY
+        
+            pulse_sec = PULSE_Y_SEC
+        
+        else:
+            # 거의 맞은 상태
+            self._publish_stop()
+        
+            msg = String()
+            msg.data = 'step_done'
+            self._align_status_pub.publish(msg)
+        
+            self.get_logger().info(
+                f'[정렬] 완료 L{level} '
+                f'(ex={err_x:.0f} ey={err_y:.0f} eyaw={err_yaw:.0f}) - 정지'
+            )
+            self.get_logger().info('/align_status 발행: step_done (already aligned)')
+            return
+        
+        # ---- pulse 시작 ----
         self.active_cmd = tw
-        self.cmd_until = time.time() + PULSE_SEC
+        self.cmd_until = time.time() + pulse_sec
         self._step_active = True
         self._step_done_sent = False
-
+        
         self.get_logger().info(
-            f'[정렬] L{level} err(x={err_x:.0f} y={err_y:.0f} yaw={err_yaw:.0f}) '
-            f'→ pulse cmd(vx={vx:.3f} vy={vy:.3f} wz={wz:.3f}) '
-            f'for {PULSE_SEC:.2f}s'
+            f'[정렬] L{level} axis={axis} '
+            f'err(x={err_x:.0f} y={err_y:.0f} yaw={err_yaw:.0f}) '
+            f'→ pulse cmd(vx={tw.linear.x:.3f} vy={tw.linear.y:.3f} wz={tw.angular.z:.3f}) '
+            f'for {pulse_sec:.2f}s'
         )
 
     def _publish_stop(self):
