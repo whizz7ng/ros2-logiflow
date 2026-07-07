@@ -590,7 +590,7 @@ class PickNode(Node):
                 FORWARD_Y_COMP = 0.0
                 target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 1)
+                self.mc.send_coords(target, DESCEND_SPEED, 0)
                 if not self._safe_sleep(4.0):
                     return
 
