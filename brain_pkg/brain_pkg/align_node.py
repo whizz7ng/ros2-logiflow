@@ -44,7 +44,7 @@ from geometry_msgs.msg import Twist
 # 각 층 관찰 자세 + 정상 정차(작업 범위 안, 정면)일 때 마커 AGV 좌표 (mm).
 # vision /marker_agv_pose 를 각 층 정상 정차에서 echo 해서 넣는다.
 # 형식: {층: {'lx':, 'ly':, 'rx':, 'ry':}}
-ARGET = {
+TARGET = {
     1: {'lx': 488.7, 'ly': 113.0, 'rx': 483.9, 'ry': -125.9},   # 1층 (실측)
     2: {'lx': 497.0, 'ly': 121.3, 'rx': 491.0, 'ry': -122.2},   # 2층 (실측)
 }
