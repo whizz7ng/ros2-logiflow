@@ -75,7 +75,7 @@ GRIPPER_CLOSE = 30
 # =========================
 # PICK_RETRY_MAX = 1
 # GRIP_CHECK_MARGIN = 8
-GRIP_SUCCESS_THRESH = 35   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
+GRIP_SUCCESS_THRESH = 40   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
 
 # RETRY_X_PUSH_MM = 5.0       # 재시도 때 x를 조금 더 전진
 # RETRY_Y_SHIFT_MM = 5.0      # 재시도 때 y도 살짝 보정
