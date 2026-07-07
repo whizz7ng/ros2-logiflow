@@ -123,16 +123,16 @@ APPROACH_Z_MM = 30.0
 # 새 eye-in-hand calib 기준으로는 0에서 시작해서 실측으로 다시 잡아야 함.
 # 순수 calib 정확도부터 확인(vision arm_xyz 로그 vs 실제 블록 위치)한 뒤,
 # 빗나가는 만큼만 아래를 채울 것.
-PICK_X_BIAS_MM = 13.0     # 이전: 12.0
-PICK_Y_BIAS_MM = -26.0     # 이전: -26.0
+PICK_X_BIAS_MM = 0.0     # 이전: 12.0
+PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 GRIPPER_Z_OFFSET_MM = 0.0   # place 시 z 보정 (eye-in-hand 재측정, 실측 조정)
 
 # y 절대보정 (고정량, mm) - 실측해서 조정. y를 0쪽으로 당기는 양.
-Y_COMP_1F_POS = 12.0   # 1층 y>0(왼쪽)일 때 뺄 양
-Y_COMP_1F_NEG = 12.0   # 1층 y<0(오른쪽)일 때 더할 양
+Y_COMP_1F_POS = 0.0   # 1층 y>0(왼쪽)일 때 뺄 양
+Y_COMP_1F_NEG = 0.0   # 1층 y<0(오른쪽)일 때 더할 양
 Y_COMP_2F_POS = 0.0   # 2층 y>0(왼쪽)일 때 뺄 양
-Y_COMP_2F_NEG = 10.0   # 2층 y<0(오른쪽)일 때 더할 양
+Y_COMP_2F_NEG = 0.0   # 2층 y<0(오른쪽)일 때 더할 양
 
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 45.0
