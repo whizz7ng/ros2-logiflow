@@ -56,8 +56,11 @@ GAIN_YAW = 0.004    # 회전: (좌우마커 y차이 mm)당 rad/s
 
 # ===== 속도 제한 (m/s, rad/s) =====
 # 처음에는 낮게 시작. 너무 적게 움직이면 조금씩 올리고, 튀면 낮춘다.
-MAX_LIN = 0.08
-MAX_ANG = 0.20
+MIN_LIN = 0.09
+MAX_LIN = 0.15
+
+MIN_ANG = 0.45
+MAX_ANG = 0.50
 
 # ===== 정렬 완료 허용 오차 =====
 TOL_XY  = 10.0      # mm
@@ -67,12 +70,31 @@ STOP_REPEAT = 3     # 정렬 완료 후 정지 명령 반복
 
 # ===== [펄스 이동 설정] =====
 # marker_agv_pose 1회 수신 → PULSE_SEC 동안만 /agv_align 반복 발행 → 자동 정지
-PULSE_SEC = 0.8    # 처음엔 0.20~0.30 추천
+PULSE_SEC = 0.40    # 처음엔 0.20~0.30 추천
 CMD_HZ = 20         # /agv_align 반복 발행 주기
 
 
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
+
+def _apply_min_max(v, min_v, max_v):
+    """
+    계산된 속도 v가 0이 아니면,
+    최소 구동 속도 이상 / 최대 제한 이하로 맞춘다.
+    """
+    if abs(v) < 1e-6:
+        return 0.0
+
+    sign = 1.0 if v > 0 else -1.0
+    mag = abs(v)
+
+    if mag < min_v:
+        mag = min_v
+
+    if mag > max_v:
+        mag = max_v
+
+    return sign * mag
 
 
 class AgvAlignNode(Node):
@@ -199,9 +221,13 @@ class AgvAlignNode(Node):
         self._aligned_stop_sent = 0
 
         # ---- cmd_vel 계산 (부호는 실측하며 맞출 것) ----
-        vx = _clamp(GAIN_X * err_x, -MAX_LIN, MAX_LIN)
-        vy = _clamp(GAIN_Y * err_y, -MAX_LIN, MAX_LIN)
-        wz = _clamp(GAIN_YAW * err_yaw, -MAX_ANG, MAX_ANG)
+        raw_vx = GAIN_X * err_x
+        raw_vy = GAIN_Y * err_y
+        raw_wz = GAIN_YAW * err_yaw
+        
+        vx = _apply_min_max(raw_vx, MIN_LIN, MAX_LIN)
+        vy = _apply_min_max(raw_vy, MIN_LIN, MAX_LIN)
+        wz = _apply_min_max(raw_wz, MIN_ANG, MAX_ANG)
 
         tw = Twist()
         tw.linear.x = float(vx)
