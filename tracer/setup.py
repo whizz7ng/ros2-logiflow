@@ -24,6 +24,17 @@ setup(
     entry_points={
         'console_scripts': [ 'tracer_node = tracer.tracer_node:main',
                              'vel_filter_node=tracer.vel_filter_node:main',
+                             'rack_wall_debug_node = tracer.rack_wall_debug_node:main',
+                             'goal_manager = tracer.goal_manager:main',
+                             'debug_route_runner = tracer.debug_route_runner: main',
+                             'nav_debug_logger = tracer.nav_debug_logger:main',
+                             'camera_node = tracer.camera_node:main',
+                             'mission_save_node = tracer.mission_save_node:main',
+                             'aruco_align_node = tracer.aruco_align_node:main',
+                             'primitive_route_runner = tracer.primitive_route_runner:main',
+                             'mission_brain_node = tracer.mission_brain_node:main',
+                             'auto_initial_pose_node = tracer.auto_initial_pose_node:main',
+                             'agv_align_bridge_node = tracer.agv_align_bridge_node:main',
         ],
     },
 )
