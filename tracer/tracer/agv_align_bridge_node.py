@@ -54,10 +54,15 @@ class AgvAlignBridgeNode(Node):
         self.declare_parameter('require_enable', True)
         self.declare_parameter('allow_brain_status_fallback', True)
 
+        # # low-speed clamp for arm-assist alignment
+        # self.declare_parameter('max_vx', 0.030)
+        # self.declare_parameter('max_vy', 0.030)
+        # self.declare_parameter('max_wz', 0.150)
+
         # low-speed clamp for arm-assist alignment
-        self.declare_parameter('max_vx', 0.030)
-        self.declare_parameter('max_vy', 0.030)
-        self.declare_parameter('max_wz', 0.150)
+        self.declare_parameter('max_vx', 0.100)
+        self.declare_parameter('max_vy', 0.060)
+        self.declare_parameter('max_wz', 0.400)
 
         # block unused axes for safety
         self.declare_parameter('block_z_axes', True)
