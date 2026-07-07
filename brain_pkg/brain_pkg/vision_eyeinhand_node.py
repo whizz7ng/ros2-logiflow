@@ -709,7 +709,7 @@ class VisionNode(Node):
             # [임시-목표값 측정용] 정상 정차에서 마커 AGV 좌표 확인.
             # align_node의 TARGET 값을 정할 때 이 로그를 보고 넣는다.
             # 목표값 다 잡으면 이 줄 지울 것.
-            self._publish_marker_agv()
+            # self._publish_marker_agv()
 
         # 카메라 3D 좌표 (deproject)
         fx, fy, ppx, ppy = self.intrinsics
