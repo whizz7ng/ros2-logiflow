@@ -128,6 +128,12 @@ PICK_Y_BIAS_MM = 0.0     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 GRIPPER_Z_OFFSET_MM = 0.0   # place 시 z 보정 (eye-in-hand 재측정, 실측 조정)
 
+# y 절대보정 (고정량, mm) - 실측해서 조정. y를 0쪽으로 당기는 양.
+Y_COMP_1F_POS = 12.0   # 1층 y>0(왼쪽)일 때 뺄 양
+Y_COMP_1F_NEG = 12.0   # 1층 y<0(오른쪽)일 때 더할 양
+Y_COMP_2F_POS = 12.0   # 2층 y>0(왼쪽)일 때 뺄 양
+Y_COMP_2F_NEG = 10.0   # 2층 y<0(오른쪽)일 때 더할 양
+
 # 집은 뒤 위로 들어올릴 높이
 LIFT_Z = 45.0
 
@@ -463,20 +469,19 @@ class PickNode(Node):
             y = y + off[1] + PICK_Y_BIAS_MM
             z = z + off[2] + PICK_Z_BIAS_MM
 
-            # y 비례보정 (정면 x는 정확, y만 비례 오차). 계수는 튜닝.
-            # y < 0(오른쪽)일 때만 비례보정. 정면~왼쪽은 정확해서 건드리지 않음.
+            # y 절대보정 (고정량, mm). 정면 x는 정확, y만 오차.
+            # y>0(왼쪽)이면 빼서 0쪽으로, y<0(오른쪽)이면 더해서 0쪽으로.
+            # 값은 실측해서 조정.
             if self.current_level == 1:
-                # 1층 전용 y보정
                 if y > 0:
-                    y -= y * 0.130      # 1층 왼쪽 계수
+                    y -= Y_COMP_1F_POS
                 elif y < 0:
-                    y += y * 0.150      # 1층 오른쪽 계수
+                    y += Y_COMP_1F_NEG
             else:
-                # 2층 (기존)
                 if y > 0:
-                    y -= y * 0.127
+                    y -= Y_COMP_2F_POS
                 elif y < 0:
-                    y += y * 0.108
+                    y += Y_COMP_2F_NEG
                 
                   
             self.get_logger().info(
