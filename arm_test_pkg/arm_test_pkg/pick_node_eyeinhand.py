@@ -29,7 +29,7 @@ from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray
 import numpy as np 
 try:
-    from pymycobot import MyCobot
+    from pymycobot import MyCobot280
 except ImportError:
     raise SystemExit("pymycobot not installed.")
 
@@ -172,7 +172,7 @@ class PickNode(Node):
 
         # myCobot 연결
         self.get_logger().info("myCobot 연결 시도 중...")
-        self.mc = MyCobot(SERIAL_PORT, BAUD)
+        self.mc = MyCobot280(SERIAL_PORT, BAUD)
         time.sleep(0.5)
 
         # 시작 시 홈 포지션 이동
