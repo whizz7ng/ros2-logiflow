@@ -67,7 +67,7 @@ STOP_REPEAT = 3     # 정렬 완료 후 정지 명령 반복
 
 # ===== [펄스 이동 설정] =====
 # marker_agv_pose 1회 수신 → PULSE_SEC 동안만 /agv_align 반복 발행 → 자동 정지
-PULSE_SEC = 0.80    # 처음엔 0.20~0.30 추천
+PULSE_SEC = 0.8    # 처음엔 0.20~0.30 추천
 CMD_HZ = 20         # /agv_align 반복 발행 주기
 
 
