@@ -199,7 +199,7 @@ class AgvAlignNode(Node):
         self._aligned_stop_sent = 0
 
         # ---- cmd_vel 계산 (부호는 실측하며 맞출 것) ----
-        vx = _clamp(-GAIN_X * err_x, -MAX_LIN, MAX_LIN)
+        vx = _clamp(GAIN_X * err_x, -MAX_LIN, MAX_LIN)
         vy = _clamp(GAIN_Y * err_y, -MAX_LIN, MAX_LIN)
         wz = _clamp(GAIN_YAW * err_yaw, -MAX_ANG, MAX_ANG)
 
