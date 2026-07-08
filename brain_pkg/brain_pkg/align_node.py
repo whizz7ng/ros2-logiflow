@@ -57,7 +57,7 @@ GAIN_YAW = 0.004
 
 # ===== 동료 bridge 제한에 맞춘 출력 속도 =====
 # bridge에서 max_vx=0.030, max_vy=0.030, max_wz=0.150으로 잘림
-ALIGN_VX = 0.05
+ALIGN_VX = 0.03
 ALIGN_VY = 0.04
 
 # safety_filter의 INPLACE_SMALL_TURN 감지 범위가 0.010~0.080이므로
@@ -76,8 +76,8 @@ TOL_YAW = 8.0
 STOP_REPEAT = 3
 
 # ===== 축별 펄스 시간 =====
-PULSE_X_SEC   = 0.30
-PULSE_Y_SEC   = 0.30
+PULSE_X_SEC   = 0.25
+PULSE_Y_SEC   = 0.25
 PULSE_YAW_SEC = 0.30
 
 CMD_HZ = 20
