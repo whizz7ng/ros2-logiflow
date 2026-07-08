@@ -77,7 +77,7 @@ STOP_REPEAT = 3
 
 # ===== 축별 펄스 시간 =====
 PULSE_X_SEC   = 0.50
-PULSE_Y_SEC   = 0.25
+PULSE_Y_SEC   = 0.30
 PULSE_YAW_SEC = 0.30
 
 CMD_HZ = 20
