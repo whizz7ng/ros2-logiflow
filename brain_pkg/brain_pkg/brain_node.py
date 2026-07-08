@@ -37,7 +37,7 @@ brain_node.py  (eye-in-hand 관측 흐름 + AGV align 재관측 + pick_failed �
 """
 
 from collections import deque
-
+import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray, Empty
@@ -102,6 +102,8 @@ class BrainNode(Node):
         self.item = None
         self.level = DEFAULT_LEVEL
         self.emergency_active = False
+        self.order_start_time = None
+        self.order_start_order = None
 
         # ===== [신규] AGV 차체 보정 재관측 제한 =====
         self.align_retry_count = 0
@@ -169,6 +171,15 @@ class BrainNode(Node):
             return
 
         self.current_order = self.order_queue.popleft()
+      
+        # ===== [KPI TIME] 큐에서 실제 작업 시작 시각 기록 =====
+        # 작업 중 들어온 주문은 _order_callback 시점이 아니라,
+        # 큐에서 꺼내 실제 시작되는 이 시점을 cycle start로 본다.
+        self.order_start_time = time.time()
+        self.order_start_order = self.current_order
+        self.get_logger().info(
+            f"[KPI TIME] cycle_start order={self.order_start_order}"
+        )
 
         # ===== [변경] 층까지 파싱 =====
         self.item, self.zone, self.level = self._parse_order(self.current_order)
@@ -232,6 +243,15 @@ class BrainNode(Node):
 
         self.get_logger().info(f'주문 수신: {msg.data}')
         self.order_queue.append(msg.data)
+      
+        # ===== [KPI TIME] 주문 수신 시각 기록 =====
+        # IDLE 상태에서 바로 시작되는 주문이면 이 시점을 cycle start로 본다.
+        if self.state == 'IDLE' and self.order_start_time is None:
+            self.order_start_time = time.time()
+            self.order_start_order = msg.data.strip()
+            self.get_logger().info(
+                f"[KPI TIME] cycle_start order={self.order_start_order}"
+            )
 
         if self.state == 'IDLE':
             self._start_next_order()
@@ -497,6 +517,20 @@ class BrainNode(Node):
                 return
 
             self.get_logger().info('주차 완료 -> IDLE 복귀')
+          
+            # ===== [KPI TIME] 주문 시작부터 parked 후 IDLE 복귀까지 총 시간 =====
+            if self.order_start_time is not None:
+                elapsed = time.time() - self.order_start_time
+                self.get_logger().info(
+                    f"[KPI TIME] cycle_end_to_idle "
+                    f"order={self.order_start_order} "
+                    f"elapsed_sec={elapsed:.2f}"
+                )
+                self.order_start_time = None
+                self.order_start_order = None
+            else:
+                self.get_logger().warn("[KPI TIME] parked 수신했지만 order_start_time 없음")
+              
             self.get_logger().info('[KPI BRAIN] event=parked result=go_idle')
 
             self.state = 'IDLE'
