@@ -697,8 +697,8 @@ class VisionNode(Node):
           
             # 중요: 같은 관측에서 매 프레임 반복 발행하지 않도록 중지
             self.mode = MODE_IDLE
-          
             return
+          
         elif dist_mm > ghi:
             self.get_logger().warn(
                 f'[거리] 너무 멈 {dist_mm:.0f} > {ghi} - 파지 보류 (AGV 전진 필요)'
@@ -709,10 +709,14 @@ class VisionNode(Node):
           
             # 중요: 같은 관측에서 매 프레임 반복 발행하지 않도록 중지
             self.mode = MODE_IDLE
-          
             return
+          
         else:
             # 작업 가능 거리 → 현재 거리 알림 후 파지 진행
+            self.get_logger().info(
+                f'[거리] 파지 가능 범위 진입 {dist_mm:.0f}mm '
+                f'({glo}~{ghi}) → /box_pose 진행'
+            )
             self._pub_dist_status('ok', dist_mm)
             # [임시-목표값 측정용] 정상 정차에서 마커 AGV 좌표 확인.
             # align_node의 TARGET 값을 정할 때 이 로그를 보고 넣는다.
