@@ -43,12 +43,12 @@ from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray, Empty
 
 
-# 포장구역별 로봇팔 플레이싱 좌표 (실측값으로 교체 필요)
-ZONE_TO_PLACE = {
-    'A': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
-    'B': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
-    'C': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
-}
+# # 포장구역별 로봇팔 플레이싱 좌표 (실측값으로 교체 필요)
+# ZONE_TO_PLACE = {
+#     'A': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
+#     'B': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
+#     'C': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
+# }
 
 # ===== [신규] 유효 층 목록 (vision_node의 SHELF_POSES 키와 일치해야 함) =====
 VALID_LEVELS = {1, 2}
@@ -452,15 +452,20 @@ class BrainNode(Node):
                 )
                 return
         
-            # 목적지 도착 후 바로 place_command 보내지 말고 QR place 좌표 요청
-            self.state = 'PLACE_VISION'
+            zone = self.zone if self.zone else 'A'
+        
+            # 목적지 도착 후 바로 placing 하지 않고,
+            # QR 관측 자세로 먼저 이동
+            self.state = 'QR_OBSERVING'
             self._pub_state()
         
-            self._publish_string(self._vision_activate_pub, 'qr_place')
-            self.get_logger().info('/vision_activate 발행: qr_place (QR 기반 플레이싱 좌표 요청)')
+            self._publish_string(self._observe_move_pub, f'qr:{zone}')
+            self.get_logger().info(
+                f'/observe_move 발행: qr:{zone} (QR 플레이싱 관측 자세 이동 요청)'
+            )
           
 
-        elif msg.data == 'parked':
+         elif msg.data == 'parked':
             if self.state != 'GO_PARKING':
                 self.get_logger().warn(
                     f'parked 수신했지만 현재 상태가 GO_PARKING이 아님: {self.state}'
@@ -494,13 +499,22 @@ class BrainNode(Node):
 
         # OBSERVING(최초 관측 / AGV align 후 재관측 / pick_failed 후 재관측)
         # 또는 VISION(J1 보정 재관측) 둘 다 처리
-        if self.state not in ('OBSERVING', 'VISION'):
+        if self.state not in ('OBSERVING', 'VISION', 'QR_OBSERVING'):
             self.get_logger().warn(
-                f'/observe_ready 수신했지만 상태가 OBSERVING/VISION 아님: {self.state}'
+                f'/observe_ready 수신했지만 상태가 OBSERVING/VISION/QR_OBSERVING 아님: {self.state}'
             )
             return
 
         self.get_logger().info(f'/observe_ready 수신: {msg.data} (관측 자세 도착)')
+      
+        # QR 플레이싱 관측 완료인 경우
+        if self.state == 'QR_OBSERVING':
+            self.state = 'PLACE_VISION'
+            self._pub_state()
+        
+            self._publish_string(self._vision_activate_pub, 'qr_place')
+            self.get_logger().info('/vision_activate 발행: qr_place')
+            return
 
         # 최초 관측이면 VISION으로 전이, 이미 VISION이면(J1 보정 재관측) 유지
         if self.state == 'OBSERVING':
