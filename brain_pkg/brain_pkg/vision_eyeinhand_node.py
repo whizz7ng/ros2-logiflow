@@ -118,7 +118,7 @@ J1_SIGN = -1.0
 # J1 보정 한계 (1회 보정량이 이 이상이면 팔로 못 잡음 → AGV 재정차)
 J1_CORRECTION_MAX = 25.0
 # 마커 보정 최대 반복 횟수 (넘으면 AGV 재정차)
-MARKER_REALIGN_MAX = 1
+MARKER_REALIGN_MAX = 2
 # 블록 검출 이 횟수(프레임) 실패하면 마커 보정 트리거
 NOT_FOUND_LIMIT = 15
 
