@@ -357,14 +357,17 @@ class PickNode(Node):
             self.get_logger().error(f"알 수 없는 층 {level} - 관측 이동 불가")
             return
     
-        self.j1_offset_by_level[level] = 0.0
-    
+        #self.j1_offset_by_level[level] = 0.0
+
+        j1_offset = self.j1_offset_by_level.get(level, 0.0)
+      
         with self._busy_lock:
             if self._busy:
                 self.get_logger().warn("작업 중이라 /observe_move 무시")
                 return
             self._busy = True
-    
+
+      
         threading.Thread(
             target=self._observe_move_sequence,
             args=(level,),
@@ -858,12 +861,13 @@ class PickNode(Node):
             if not self._safe_sleep(5.0):
                 return
 
-            cur = self.mc.get_coords()
-            if cur and cur != -1 and len(cur) == 6:
-                target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
-                self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
-            else:
-                self._log(f"[PLACE] get_coords 실패({cur}), 기존 target 사용")
+            # cur = self.mc.get_coords()
+            # if cur and cur != -1 and len(cur) == 6:
+            #     target = [cur[0], cur[1], target_z, cur[3], cur[4], cur[5]]
+            #     self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
+            # else:
+            #     self._log(f"[PLACE] get_coords 실패({cur}), 기존 target 사용")
+            self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
 
             self._log("[PLACE 2/6] z축 수직 하강")
             self.mc.send_coords(target, DESCEND_SPEED, 1)
