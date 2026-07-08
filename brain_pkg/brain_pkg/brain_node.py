@@ -107,7 +107,7 @@ class BrainNode(Node):
 
         # ===== [신규] AGV 차체 보정 재관측 제한 =====
         self.align_retry_count = 0
-        self.ALIGN_RETRY_MAX = 8
+        self.ALIGN_RETRY_MAX = 20
 
         # ===== [신규] pick 실패 시 재관측 제한 =====
         self.pick_retry_count = 0
@@ -264,45 +264,62 @@ class BrainNode(Node):
     def _distance_status_callback(self, msg):
         """
         vision_node의 거리 판정 결과 수신.
-        - too_close / too_far: vision이 /marker_agv_pose를 발행했고,
-          align_node가 AGV 보정을 수행할 예정이므로 step_done을 기다린다.
-        - ok: 정상 파지 가능 거리이므로 box_pose를 받아야 한다.
-          이때 늦게 들어오는 step_done은 무시해야 한다.
+        - too_far: 아직 멀다 → AGV 전진 보정 후 재관측 반복
+        - too_close: 너무 가깝다 → 후진 금지 정책이므로 자동 보정 중단
+        - ok: 정상 파지 가능 거리 → /box_pose 대기
         """
         if self.emergency_active:
             self.get_logger().warn(
                 f'/distance_status 수신했지만 비상정지 상태라 무시: {msg.data}'
             )
             return
-
+    
         status = msg.data.strip()
         self.get_logger().info(f'/distance_status 수신: {status}')
         self.get_logger().info(
             f'[KPI BRAIN] event=distance_status state={self.state} '
             f'status={status} waiting_align_step={self.waiting_align_step}'
         )
-
+    
         head = status.split(':', 1)[0]
-
-        if head in ('too_close', 'too_far'):
+    
+        # 너무 가까움: 후진 금지라 자동 보정 불가
+        if head == 'too_close':
+            if self.state == 'VISION':
+                self.get_logger().error(
+                    f'거리 너무 가까움({status}) - 후진 불가라 자동 보정 중단 → ERROR'
+                )
+                self.waiting_align_step = False
+                self.state = 'ERROR'
+                self._pub_state()
+            else:
+                self.get_logger().warn(
+                    f'too_close 수신했지만 현재 상태가 VISION 아님: {self.state}'
+                )
+            return
+          
+    
+        # 너무 멂: 전진 보정 반복 허용
+        if head == 'too_far':
             if self.state == 'VISION':
                 self.waiting_align_step = True
                 self.get_logger().warn(
-                    f'거리 보정 필요({status}) → /align_status step_done 대기'
+                    f'거리 너무 멂({status}) → AGV 전진 보정 후 step_done 대기'
                 )
             else:
                 self.get_logger().warn(
-                    f'거리 보정 상태({status}) 수신했지만 현재 상태가 VISION 아님: {self.state}'
+                    f'too_far 수신했지만 현재 상태가 VISION 아님: {self.state}'
                 )
             return
-
+    
+        # 정상 거리: box_pose 대기
         if head == 'ok':
-            # 정상 거리면 곧 /box_pose가 들어올 가능성이 크다.
-            # 이전 align step_done이 뒤늦게 들어와도 무시하도록 플래그를 끈다.
             self.waiting_align_step = False
-            self.get_logger().info('거리 ok → /box_pose 대기, 늦은 align step_done은 무시')
+            self.get_logger().info(
+                '거리 ok → /box_pose 대기, 늦은 align step_done은 무시'
+            )
             return
-
+    
         self.get_logger().warn(f'알 수 없는 distance_status: {status}')
 
     def _box_pose_callback(self, msg):
@@ -649,16 +666,19 @@ class BrainNode(Node):
         # 이번 step_done은 처리했으므로 플래그 해제
         self.waiting_align_step = False
 
-        if self.align_retry_count >= self.ALIGN_RETRY_MAX:
-            self.get_logger().error('AGV 차체 보정 반복 초과 → ERROR')
-            self.state = 'ERROR'
-            self._pub_state()
-            return
+        # if self.align_retry_count >= self.ALIGN_RETRY_MAX:
+        #     self.get_logger().error('AGV 차체 보정 반복 초과 → ERROR')
+        #     self.state = 'ERROR'
+        #     self._pub_state()
+        #     return
 
+        # 무제한 재관측 모드:
+        # GRASP_DEPTH_RANGE 안에 들어올 때까지 too_far → align → 재관측 반복
+        # 단, too_close는 distance_status 콜백에서 ERROR 처리해야 함
         self.align_retry_count += 1
 
         self.get_logger().warn(
-            f'AGV 차체 보정 후 재관측 {self.align_retry_count}/{self.ALIGN_RETRY_MAX}'
+            f'AGV 차체 보정 후 재관측 {self.align_retry_count}회 - 무제한 모드'
         )
 
         # 다시 관측 자세부터 시작
