@@ -689,6 +689,7 @@ class BrainNode(Node):
         self.get_logger().info(
             f'/observe_move 재발행: level={self.level} (AGV align 후 재관측)'
         )
+        return
 
     def _emergency_stop_callback(self, msg):
         command = msg.data.strip().lower()
