@@ -133,20 +133,32 @@ class AgvAlignNode(Node):
             '보정 방식: marker 1회 측정 → 짧게 이동 → 정지 → /align_status step_done'
         )
 
-    def _timer_callback(self):
+     def _timer_callback(self):
         """
-        marker_callback에서 계산된 active_cmd를 PULSE_SEC 동안 반복 발행한다.
+        marker_callback에서 계산된 active_cmd를 pulse_sec 동안 반복 발행한다.
         시간이 끝나면 Twist() 정지를 발행하고, /align_status step_done을 1회 발행한다.
         """
+        # 이동 중인 step이 없으면 아무것도 발행하지 않음
+        if not self._step_active:
+            return
+
         now = time.time()
 
         if now < self.cmd_until:
             self._align_pub.publish(self.active_cmd)
-            self._step_active = True
             return
 
         # pulse 시간이 끝났으면 정지 명령
-        self._align_pub.publish(Twist())
+        for _ in range(STOP_REPEAT):
+            self._align_pub.publish(Twist())
+
+        self._step_active = False
+        self._step_done_sent = True
+
+        msg = String()
+        msg.data = 'step_done'
+        self._align_status_pub.publish(msg)
+        self.get_logger().info('/align_status 발행: step_done')
 
         # 방금까지 움직이던 step이 끝난 순간에만 step_done 발행
         if self._step_active and not self._step_done_sent:
