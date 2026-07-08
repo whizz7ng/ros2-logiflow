@@ -57,12 +57,12 @@ GAIN_YAW = 0.004
 
 # ===== 동료 bridge 제한에 맞춘 출력 속도 =====
 # bridge에서 max_vx=0.030, max_vy=0.030, max_wz=0.150으로 잘림
-ALIGN_VX = 0.10
-ALIGN_VY = 0.06
+ALIGN_VX = 0.05
+ALIGN_VY = 0.04
 
 # safety_filter의 INPLACE_SMALL_TURN 감지 범위가 0.010~0.080이므로
 # yaw는 일부러 작게 오래 보냄
-ALIGN_WZ = 0.35
+ALIGN_WZ = 0.15
 
 # 부호가 반대로 움직이면 여기만 -1.0으로 바꾸면 됨
 SIGN_X = 1.0
@@ -76,9 +76,9 @@ TOL_YAW = 8.0
 STOP_REPEAT = 3
 
 # ===== 축별 펄스 시간 =====
-PULSE_X_SEC   = 0.50
-PULSE_Y_SEC   = 0.45
-PULSE_YAW_SEC = 0.40
+PULSE_X_SEC   = 0.30
+PULSE_Y_SEC   = 0.30
+PULSE_YAW_SEC = 0.30
 
 CMD_HZ = 20
 
@@ -258,22 +258,13 @@ class AgvAlignNode(Node):
             pulse_sec = PULSE_YAW_SEC
         
         # 2순위: 앞뒤 x
-        elif abs(err_x) >= TOL_XY:
+        # 현재 AGV 정책: 후진 금지.
+        # 따라서 x축 보정은 전진(raw_vx > 0)일 때만 수행한다.
+        # raw_vx < 0, 즉 후진이 필요한 상황이면 x 보정은 하지 않고 y 보정으로 넘어간다.
+        elif abs(err_x) >= TOL_XY and (GAIN_X * err_x) > 0:
             axis = 'x'
-        
-            raw_vx = GAIN_X * err_x
-            if raw_vx > 0:
-                tw.linear.x = SIGN_X * ALIGN_VX
-            else:
-                tw.linear.x = -SIGN_X * ALIGN_VX
-        
+            tw.linear.x = SIGN_X * ALIGN_VX
             pulse_sec = PULSE_X_SEC
-        
-            if tw.linear.x < 0.0:
-                self.get_logger().warn(
-                    '[정렬] vx 음수 명령 필요. '
-                    '하지만 동료 safety_filter의 block_reverse=True면 실제 /cmd_vel에서 0으로 막힐 수 있음.'
-                )
         
         # 3순위: 좌우 y
         elif abs(err_y) >= TOL_XY:
