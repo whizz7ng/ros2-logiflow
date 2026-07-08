@@ -694,6 +694,10 @@ class VisionNode(Node):
             self._pub_dist_status('too_close', dist_mm)
             self._publish_marker_agv()   # AGV 후진하도록 마커 AGV 좌표 제공
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+          
+            # 중요: 같은 관측에서 매 프레임 반복 발행하지 않도록 중지
+            self.mode = MODE_IDLE
+          
             return
         elif dist_mm > ghi:
             self.get_logger().warn(
@@ -702,6 +706,10 @@ class VisionNode(Node):
             self._pub_dist_status('too_far', dist_mm)
             self._publish_marker_agv()   # AGV 전진하도록 마커 AGV 좌표 제공
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
+          
+            # 중요: 같은 관측에서 매 프레임 반복 발행하지 않도록 중지
+            self.mode = MODE_IDLE
+          
             return
         else:
             # 작업 가능 거리 → 현재 거리 알림 후 파지 진행
