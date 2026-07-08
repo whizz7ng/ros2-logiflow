@@ -139,9 +139,9 @@ PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
 GRIPPER_Z_OFFSET_MM = 0.0   # place 시 z 보정 (eye-in-hand 재측정, 실측 조정)
 
 # y 절대보정 (고정량, mm) - 실측해서 조정. y를 0쪽으로 당기는 양.
-Y_COMP_1F_POS = -7.9   # 1층 y>0(왼쪽)일 때 뺄 양
+Y_COMP_1F_POS = -8.5   # 1층 y>0(왼쪽)일 때 뺄 양
 Y_COMP_1F_NEG = 0.0   # 1층 y<0(오른쪽)일 때 더할 양
-Y_COMP_2F_POS = 0.0   # 2층 y>0(왼쪽)일 때 뺄 양
+Y_COMP_2F_POS = -1.5   # 2층 y>0(왼쪽)일 때 뺄 양
 Y_COMP_2F_NEG = 8.5   # 2층 y<0(오른쪽)일 때 더할 양
 
 # 집은 뒤 위로 들어올릴 높이
