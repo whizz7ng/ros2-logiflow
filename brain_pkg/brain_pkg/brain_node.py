@@ -62,6 +62,7 @@ class BrainNode(Node):
         # Subscribers
         self.create_subscription(String, '/order_request', self._order_callback, 10)
         self.create_subscription(Float32MultiArray, '/box_pose', self._box_pose_callback, 10)
+        self.create_subscription(Float32MultiArray, '/place_pose', self._place_pose_callback, 10)
         self.create_subscription(String, '/pick_status', self._pick_status_callback, 10)
         self.create_subscription(String, '/nav_status', self._nav_status_callback, 10)
         self.create_subscription(String, '/emergency_stop', self._emergency_stop_callback, 10)
@@ -299,6 +300,25 @@ class BrainNode(Node):
         self._pick_command_pub.publish(msg)
         self.get_logger().info('/pick_command 발행')
 
+    def _place_pose_callback(self, msg):
+        if self.emergency_active:
+            self.get_logger().warn('/place_pose 수신했지만 비상정지 상태라 무시')
+            return
+    
+        self.get_logger().info(f'/place_pose 수신: {list(msg.data)}')
+    
+        if self.state != 'PLACE_VISION':
+            self.get_logger().warn(
+                f'현재 상태가 PLACE_VISION이 아니므로 /place_pose 무시. 현재 상태: {self.state}'
+            )
+            return
+    
+        self.state = 'PLACING'
+        self._pub_state()
+    
+        self._place_command_pub.publish(msg)
+        self.get_logger().info('/place_command 발행: QR 기반 place_pose')
+
     def _pick_status_callback(self, msg):
         if self.emergency_active:
             self.get_logger().warn(
@@ -423,6 +443,7 @@ class BrainNode(Node):
             self.get_logger().info(
                 f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)'
             )
+          
 
         elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
@@ -430,24 +451,14 @@ class BrainNode(Node):
                     f'arrived 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
                 )
                 return
-
-            self.state = 'PLACING'
-            self.waiting_align_step = False
+        
+            # 목적지 도착 후 바로 place_command 보내지 말고 QR place 좌표 요청
+            self.state = 'PLACE_VISION'
             self._pub_state()
-
-            zone = self.zone if self.zone else 'A'
-
-            if zone not in ZONE_TO_PLACE:
-                self.get_logger().error(f'ZONE_TO_PLACE에 없는 구역: {zone}')
-                self.state = 'ERROR'
-                self._pub_state()
-                return
-
-            place_msg = Float32MultiArray()
-            place_msg.data = ZONE_TO_PLACE[zone]
-            self._place_command_pub.publish(place_msg)
-
-            self.get_logger().info(f'/place_command 발행: zone={zone}')
+        
+            self._publish_string(self._vision_activate_pub, 'qr_place')
+            self.get_logger().info('/vision_activate 발행: qr_place (QR 기반 플레이싱 좌표 요청)')
+          
 
         elif msg.data == 'parked':
             if self.state != 'GO_PARKING':
