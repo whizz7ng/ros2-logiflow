@@ -40,6 +40,12 @@ from std_msgs.msg import Float32MultiArray, String
 from geometry_msgs.msg import Twist
 
 
+SINGLE_MARKER_YAW_SEC = 0.25
+SINGLE_MARKER_WZ = 0.12
+
+# 방향이 반대로 돌면 이 값만 -1.0으로 바꾸면 됨
+SIGN_SINGLE_MARKER_YAW = 1.0
+
 # ===== [층별 목표값 - 실측 후 채울 것] =====
 # 각 층 관찰 자세 + 정상 정차(작업 범위 안, 정면)일 때 마커 AGV 좌표 (mm).
 # vision /marker_agv_pose 를 각 층 정상 정차에서 echo 해서 넣는다.
@@ -256,9 +262,29 @@ class AgvAlignNode(Node):
         axis = 'none'
         pulse_sec = 0.0
         
-        # 1순위: yaw
-        # 두 마커가 모두 보일 때만 yaw 보정 가능
-        if has_left and has_right and abs(err_yaw) >= TOL_YAW:
+        # 0순위: 마커가 하나만 보일 때 yaw 복구
+        # 오른쪽 마커만 보이면 왼쪽으로 회전
+        # 왼쪽 마커만 보이면 오른쪽으로 회전
+        if has_right and not has_left:
+            axis = 'single_marker_yaw_left'
+            tw.angular.z = SIGN_SINGLE_MARKER_YAW * SINGLE_MARKER_WZ
+            pulse_sec = SINGLE_MARKER_YAW_SEC
+
+            self.get_logger().warn(
+                '[정렬] 오른쪽 마커만 보임 → 왼쪽 회전으로 yaw 복구'
+            )
+
+        elif has_left and not has_right:
+            axis = 'single_marker_yaw_right'
+            tw.angular.z = -SIGN_SINGLE_MARKER_YAW * SINGLE_MARKER_WZ
+            pulse_sec = SINGLE_MARKER_YAW_SEC
+
+            self.get_logger().warn(
+                '[정렬] 왼쪽 마커만 보임 → 오른쪽 회전으로 yaw 복구'
+            )
+
+        # 1순위: 양쪽 마커가 모두 보일 때 기존 yaw 보정
+        elif has_left and has_right and abs(err_yaw) >= TOL_YAW:
             axis = 'yaw'
 
             raw_wz = GAIN_YAW * err_yaw
