@@ -93,7 +93,7 @@ DEPTH_RANGE = {
 # 이 범위 밖이면 AGV가 움직여야 함 → /distance_status 발행.
 GRASP_DEPTH_RANGE = {
     1: (243, 321),
-    2: (243, 345),
+    2: (243, 343),
 }
 
 # ===== [마커 J1 보정] =====
