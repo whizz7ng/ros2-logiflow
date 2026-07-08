@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+log/
+topic_log/
+
+build/
+install/
