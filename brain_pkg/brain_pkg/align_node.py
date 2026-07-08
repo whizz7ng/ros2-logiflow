@@ -248,44 +248,57 @@ class AgvAlignNode(Node):
         # 두 마커가 모두 보일 때만 yaw 보정 가능
         if has_left and has_right and abs(err_yaw) >= TOL_YAW:
             axis = 'yaw'
-        
+
             raw_wz = GAIN_YAW * err_yaw
             if raw_wz > 0:
                 tw.angular.z = SIGN_YAW * ALIGN_WZ
             else:
                 tw.angular.z = -SIGN_YAW * ALIGN_WZ
-        
+
             pulse_sec = PULSE_YAW_SEC
-        
+
         # 2순위: 앞뒤 x
-        # 현재 AGV 정책: 후진 금지.
-        # 따라서 x축 보정은 전진(raw_vx > 0)일 때만 수행한다.
-        # raw_vx < 0, 즉 후진이 필요한 상황이면 x 보정은 하지 않고 y 보정으로 넘어간다.
-        elif abs(err_x) >= TOL_XY and (GAIN_X * err_x) > 0:
-            axis = 'x'
-            tw.linear.x = SIGN_X * ALIGN_VX
-            pulse_sec = PULSE_X_SEC
-        
+        # 후진 금지 정책이므로 x축은 전진 방향일 때만 보정한다.
+        # 후진이 필요한 상태면 이 align_node로는 해결 불가.
+        elif abs(err_x) >= TOL_XY:
+            raw_vx = GAIN_X * err_x
+
+            if raw_vx > 0:
+                axis = 'x'
+                tw.linear.x = SIGN_X * ALIGN_VX
+                pulse_sec = PULSE_X_SEC
+            else:
+                self._publish_stop()
+
+                msg = String()
+                msg.data = 'step_done'
+                self._align_status_pub.publish(msg)
+
+                self.get_logger().warn(
+                    f'[정렬] 후진 필요 err_x={err_x:.0f} 하지만 후진 금지 → x 보정 불가'
+                )
+                return
+
         # 3순위: 좌우 y
         elif abs(err_y) >= TOL_XY:
             axis = 'y'
-        
+
             raw_vy = GAIN_Y * err_y
             if raw_vy > 0:
                 tw.linear.y = SIGN_Y * ALIGN_VY
             else:
                 tw.linear.y = -SIGN_Y * ALIGN_VY
-        
+
             pulse_sec = PULSE_Y_SEC
-        
+
         else:
             # 거의 맞은 상태
             self._publish_stop()
-        
+
             msg = String()
             msg.data = 'step_done'
             self._align_status_pub.publish(msg)
-        
+
             self.get_logger().info(
                 f'[정렬] 완료 L{level} '
                 f'(ex={err_x:.0f} ey={err_y:.0f} eyaw={err_yaw:.0f}) - 정지'
