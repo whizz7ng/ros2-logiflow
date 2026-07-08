@@ -202,19 +202,139 @@ source ~/.bashrc
 
 ### 메인 흐름 (주문 → 픽업 → 배송)
 
-| 토픽명 | 발신 | 수신 | 타입 | 내용 / 비고 |
-| --- | --- | --- | --- | --- |
-| `/order_request` | `wms_dashboard_node` | `brain_node` | `std_msgs/String` | 주문 정보. `"물품라벨:구역"` 형식. 예: `"red_cross:A"` |
-| `/vision_activate` | `brain_node` | `vision_node` | `std_msgs/String` | 비전 인식 활성화/중지. 물품라벨 수신 시 검출 시작, `"stop"` 시 중지 |
-| `/box_pose` | `vision_node` | `brain_node` | `std_msgs/Float32MultiArray` | 인식된 블록의 3D 목표 좌표. `[x, y, z, rx, ry, rz]` |
-| `/pick_command` | `brain_node` | `pick_node` (Pi) | `std_msgs/Float32MultiArray` | 피킹 명령 및 목표 좌표. `[x, y, z, rx, ry, rz]` |
-| `/place_command` | `brain_node` | `pick_node` (Pi) | `std_msgs/Float32MultiArray` | 플레이싱 명령 및 내려놓기 좌표. `[x, y, z, rx, ry, rz]` |
-| `/pick_status` | `pick_node` (Pi) | `brain_node` | `std_msgs/String` | 피킹/플레이싱 결과. 값: `"done"`, `"placing_done"`, `"error"` |
-| `/place_target` | `brain_node` | `nav_node` | `std_msgs/String` | 포장 목적지. 값: `"A"`, `"B"`, `"C"` |
-| `/arm_status` | `brain_node` | `nav_node` | `std_msgs/String` | 로봇팔 작업 상태. 값: `"picked"`, `"placed"`. AGV 이동 트리거 |
-| `/go_parking` | `brain_node` | `nav_node` | `std_msgs/Empty` | 모든 주문 완료 후 주차 복귀 명령 |
-| `/nav_status` | `nav_node` | `brain_node` | `std_msgs/String` | AGV 이동 상태. 값: `"arrived_objects"`, `"arrived"`, `"parked"` |
-| `/wms_update` | `brain_node` | `wms_dashboard_node` | `std_msgs/String` | 주문 완료/실패 알림. `"물품라벨:구역:상태"` 예: `"red_cross:A:done"`. 상태값: `"done"`, `"error"` |
+| 토픽명                | 발신                   | 수신                   | 타입                           | 내용 / 비고                                                                                 |
+| ------------------ | -------------------- | -------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| `/order_request`   | `wms_dashboard_node` | `brain_node`         | `std_msgs/String`            | 주문 정보. `"물품라벨:구역:층"` 형식. 예: `"green_clover:A:2"`. 층 생략 시 기본 1층                          |
+| `/place_target`    | `brain_node`         | `nav_node`           | `std_msgs/String`            | 포장 목적지. 값: `"A"`, `"B"`, `"C"`. 주문 시작 시 AGV 목적지 설정                                      |
+| `/nav_status`      | `nav_node`           | `brain_node`         | `std_msgs/String`            | AGV 이동 상태. 값: `"arrived_objects"`, `"arrived"`, `"parked"`                              |
+| `/observe_move`    | `brain_node`         | `pick_node`          | `std_msgs/String`            | eye-in-hand 관측 자세 이동 명령. 데이터는 층 번호 `"1"` 또는 `"2"`                                       |
+| `/observe_ready`   | `pick_node`          | `brain_node`         | `std_msgs/String`            | 로봇팔이 관측 자세에 도착했음을 알림. 값: `"ready"`                                                      |
+| `/observe_pose`    | `pick_node`          | `vision_node`        | `std_msgs/Float32MultiArray` | 실제 관측 자세의 로봇팔 좌표. `[x, y, z, rx, ry, rz]`. vision_node가 동적 `T_cam2base` 계산에 사용          |
+| `/vision_activate` | `brain_node`         | `vision_node`        | `std_msgs/String`            | 비전 인식 활성화/중지. 블록 검출은 `"물품라벨:층"` 형식. 예: `"green_clover:2"`. `"stop"` 시 중지                |
+| `/box_pose`        | `vision_node`        | `brain_node`         | `std_msgs/Float32MultiArray` | 인식된 블록의 로봇팔 기준 3D 목표 좌표. `[x, y, z, rx, ry, rz]`                                        |
+| `/pick_command`    | `brain_node`         | `pick_node`          | `std_msgs/Float32MultiArray` | 피킹 명령 및 목표 좌표. `/box_pose`를 받아 그대로 전달. `[x, y, z, rx, ry, rz]`                          |
+| `/pick_status`     | `pick_node`          | `brain_node`         | `std_msgs/String`            | 피킹/플레이싱 결과. 값: `"done"`, `"pick_failed"`, `"placing_done"`, `"realign_fail"`, `"error"` |
+| `/arm_status`      | `brain_node`         | `nav_node`           | `std_msgs/String`            | 로봇팔 작업 상태. 값: `"picked"`, `"placed"`. AGV 이동 트리거로 사용                                    |
+| `/place_command`   | `brain_node`         | `pick_node`          | `std_msgs/Float32MultiArray` | 플레이싱 명령 및 내려놓기 좌표. 현재는 `ZONE_TO_PLACE` 고정 좌표 사용. `[x, y, z, rx, ry, rz]`                |
+| `/go_parking`      | `brain_node`         | `nav_node`           | `std_msgs/Empty`             | 모든 주문 완료 후 주차 복귀 명령                                                                     |
+| `/wms_update`      | `brain_node`         | `wms_dashboard_node` | `std_msgs/String`            | 주문 완료/실패 알림. `"물품라벨:구역:상태"` 예: `"green_clover:A:done"`                             
+
+Vision 거리 판정 및 AGV 차체보정 흐름
+
+| 토픽명                 | 발신                                   | 수신                      | 타입                           | 내용 / 비고                                                          |
+| ------------------- | ------------------------------------ | ----------------------- | ---------------------------- | ---------------------------------------------------------------- |
+| `/distance_status`  | `vision_node`                        | `brain_node`            | `std_msgs/String`            | 블록까지의 거리 상태. 값 예: `"ok:311"`, `"too_close:239"`, `"too_far:370"` |
+| `/marker_agv_pose`  | `vision_node`                        | `agv_align_node`        | `std_msgs/Float32MultiArray` | ArUco 마커의 AGV 기준 좌표. `[level, Lx, Ly, Rx, Ry]`. 안 보이는 마커는 `NaN`  |
+| `/agv_align`        | `agv_align_node`                     | `agv_align_bridge_node` | `geometry_msgs/Twist`        | AGV 차체보정 속도 명령. `linear.x`, `linear.y`, `angular.z` 사용           |
+| `/align_status`     | `agv_align_node`                     | `brain_node`            | `std_msgs/String`            | 차체보정 상태. `"step_done"`은 한 번 보정 이동 완료, `"aligned"`는 정렬 완료         |
+| `/agv_align_enable` | `brain_node` 또는 `mission_brain_node` | `agv_align_bridge_node` | `std_msgs/Bool`              | AGV align 명령 허용 여부. `True`일 때만 `/agv_align`을 실제 주행 명령으로 전달       |
+| `/cmd_vel_nav`      | `agv_align_bridge_node`              | `cmd_vel_safety_filter` | `geometry_msgs/Twist`        | bridge를 통과한 중간 속도 명령                                             |
+| `/cmd_vel`          | `cmd_vel_safety_filter`              | `myAGV_driver`          | `geometry_msgs/Twist`        | 최종 AGV 구동 명령                                                     |
+
+
+차체보정 판단 기준
+
+| 상황              | vision_node 동작                                                 | brain_node 동작                                             | align_node 동작         |
+| --------------- | -------------------------------------------------------------- | --------------------------------------------------------- | --------------------- |
+| 블록 거리 정상        | `/distance_status = "ok:mm"` 발행 후 `/box_pose` 발행               | `waiting_align_step=False`, `/box_pose` 수신 시 `PICKING` 전환 | 동작 없음                 |
+| 블록이 너무 가까움      | `/distance_status = "too_close:mm"` 발행 후 `/marker_agv_pose` 발행 | `waiting_align_step=True`, `/align_status step_done` 대기   | 후진 방향 `/agv_align` 발행 |
+| 블록이 너무 멂        | `/distance_status = "too_far:mm"` 발행 후 `/marker_agv_pose` 발행   | `waiting_align_step=True`, `/align_status step_done` 대기   | 전진 방향 `/agv_align` 발행 |
+| depth 실패 반복     | `/marker_agv_pose` 발행 또는 `realign_fail`                        | 재관측 또는 ERROR 처리                                           | 마커 기준 보정              |
+| 늦은 step_done 수신 | 해당 없음                                                          | `waiting_align_step=False`이면 무시                           | 해당 없음                 |
+
+J1 보정 및 마커 보정 보조 토픽
+
+| 토픽명               | 발신            | 수신                         | 타입                            | 내용 / 비고                                                                     |
+| ----------------- | ------------- | -------------------------- | ----------------------------- | --------------------------------------------------------------------------- |
+| `/j1_correction`  | `vision_node` | `pick_node`                | `std_msgs/String`             | 로봇팔 1번축 보정 명령. 예: `"2:8.5"`. `"realign_fail"`이면 팔 보정으로 해결 불가                |
+| `/detected_image` | `vision_node` | `dashboard_node` 또는 디버그 뷰어 | `sensor_msgs/CompressedImage` | YOLO 검출 결과 이미지                                                              |
+| `/depth_qr`       | `vision_node` | `nav_node` 또는 `brain_node` | `std_msgs/String`             | QR 검증 결과. 예: `"A:0.80"`. 현재 배송 검증용으로 사용 가능                                  |
+| `/place_pose`     | `vision_node` | `brain_node` 예정            | `std_msgs/Float32MultiArray`  | QR 기반 플레이싱 좌표. `[x, y, z, rx, ry, rz]`. 현재 vision에는 기능이 있으나 brain 연동은 추후 작업 |
+
+
+현재 FSM 상태값
+
+| 상태               | 의미                         |
+| ---------------- | -------------------------- |
+| `IDLE`           | 대기 상태                      |
+| `NAV_TO_RACK`    | AGV가 물체 위치로 이동 중           |
+| `OBSERVING`      | 로봇팔이 관측 자세로 이동 중           |
+| `VISION`         | vision_node가 블록 또는 마커 인식 중 |
+| `PICKING`        | pick_node가 블록 파지 중         |
+| `NAV_TO_DEST`    | AGV가 포장 목적지로 이동 중          |
+| `PLACING`        | 로봇팔이 물체를 내려놓는 중            |
+| `GO_PARKING`     | 모든 주문 완료 후 주차 위치로 복귀 중     |
+| `ERROR`          | 오류 상태                      |
+| `EMERGENCY_STOP` | 비상정지 상태                    |
+
+
+/pick_status 값 정의
+| 값                | 의미                                |
+| ---------------- | --------------------------------- |
+| `"done"`         | 피킹 성공                             |
+| `"pick_failed"`  | 파지 실패. brain_node가 재관측 후 한 번 더 시도 |
+| `"placing_done"` | 플레이싱 완료                           |
+| `"realign_fail"` | 로봇팔 J1 보정으로 해결 불가. AGV 차체 보정 필요   |
+| `"error"`        | pick_node 내부 오류                   |
+
+
+/vision_activate 값 정의
+
+| 값                  | 의미                                                           |
+| ------------------ | ------------------------------------------------------------ |
+| `"green_clover:2"` | 2층에서 `green_clover` 블록 검출 시작                                 |
+| `"red_cross:1"`    | 1층에서 `red_cross` 블록 검출 시작                                    |
+| `"stop"`           | 비전 인식 중지                                                     |
+| `"qr_place"`       | QR 기반 place 좌표 계산 모드. 현재 vision_node 기능은 있으나 brain 연동은 추후 작업 |
+| `"align:2"`        | ArUco 정렬 전용 모드. align-first 구조 전환 시 사용 예정                    |
+
+현재 기준 전체 흐름
+
+/order_request "green_clover:A:2"
+↓
+brain_node: NAV_TO_RACK
+↓
+/place_target "A"
+↓
+nav_node: 물체 위치 이동
+↓
+/nav_status "arrived_objects"
+↓
+brain_node: OBSERVING
+↓
+/observe_move "2"
+↓
+pick_node: 2층 관측 자세 이동
+↓
+/observe_ready "ready"
+/observe_pose [x,y,z,rx,ry,rz]
+↓
+brain_node: VISION
+↓
+/vision_activate "green_clover:2"
+↓
+vision_node: YOLO + depth
+↓
+거리 정상:
+  /distance_status "ok:311"
+  /box_pose [x,y,z,rx,ry,rz]
+  ↓
+  brain_node: PICKING
+  ↓
+  /pick_command
+  ↓
+  /pick_status "done"
+
+거리 비정상:
+  /distance_status "too_close:239" 또는 "too_far:370"
+  /marker_agv_pose [level,Lx,Ly,Rx,Ry]
+  ↓
+  agv_align_node: /agv_align 발행
+  ↓
+  /align_status "step_done"
+  ↓
+  brain_node: OBSERVING으로 돌아가 재관측
+  
 
 ### 보조 / 검증
 
