@@ -75,7 +75,7 @@ X_CAM2GRIPPER_PATH = "/home/zzz/calibration/X_cam2gripper.npy"
 
 # 폴백용 관측 포즈 (동적 T 정상 작동 시 안 쓰임)
 SHELF_POSES = {
-    1: [10.8, -61.6, 228.4, -123.1, -34.2, -66.6], #coords
+    1: [10.8, -61.6, 228.4, -123.1, -34.2, -66.6], #coordshttps://github.com/whizz7ng/ros2-logiflow/blob/feat/goong/brain_pkg/brain_pkg/vision_eyeinhand_node.py
     2: [-5.0, 79.45, -76.81, -13.71, 5.97, -44.2], #angles
 }
 
