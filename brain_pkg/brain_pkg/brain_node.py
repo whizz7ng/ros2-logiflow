@@ -182,6 +182,10 @@ class BrainNode(Node):
             f'다음 주문 시작: {self.current_order}, '
             f'item={self.item}, zone={self.zone}, level={self.level}'
         )
+        self.get_logger().info(
+            f'[KPI BRAIN] event=start_order order={self.current_order} '
+            f'item={self.item} zone={self.zone} level={self.level}'
+        )
 
         self.state = 'NAV_TO_RACK'
         self._pub_state()
@@ -253,6 +257,10 @@ class BrainNode(Node):
 
         status = msg.data.strip()
         self.get_logger().info(f'/distance_status 수신: {status}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=distance_status state={self.state} '
+            f'status={status} waiting_align_step={self.waiting_align_step}'
+        )
 
         head = status.split(':', 1)[0]
 
@@ -283,6 +291,10 @@ class BrainNode(Node):
             return
 
         self.get_logger().info(f'/box_pose 수신: {list(msg.data)}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=box_pose state={self.state} '
+            f'coords={list(msg.data)}'
+        )
 
         if self.state != 'VISION':
             self.get_logger().warn(
@@ -306,6 +318,10 @@ class BrainNode(Node):
             return
     
         self.get_logger().info(f'/place_pose 수신: {list(msg.data)}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=place_pose state={self.state} '
+            f'coords={list(msg.data)}'
+        )
     
         if self.state != 'PLACE_VISION':
             self.get_logger().warn(
@@ -328,6 +344,10 @@ class BrainNode(Node):
 
         status = msg.data.strip()
         self.get_logger().info(f'/pick_status 수신: {status}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=pick_status state={self.state} '
+            f'status={status} order={self.current_order}'
+        )
 
         if status == 'done':
             if self.state != 'PICKING':
@@ -426,6 +446,10 @@ class BrainNode(Node):
             return
 
         self.get_logger().info(f'/nav_status 수신: {msg.data}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=nav_status state={self.state} '
+            f'status={msg.data} order={self.current_order}'
+        )
 
         if msg.data == 'arrived_objects':
             if self.state != 'NAV_TO_RACK':
@@ -444,7 +468,7 @@ class BrainNode(Node):
                 f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)'
             )
           
-        
+
         elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
@@ -466,27 +490,28 @@ class BrainNode(Node):
           
 
         elif msg.data == 'parked':
-              if self.state != 'GO_PARKING':
-                  self.get_logger().warn(
-                      f'parked 수신했지만 현재 상태가 GO_PARKING이 아님: {self.state}'
-                  )
-                  return
-  
-              self.get_logger().info('주차 완료 -> IDLE 복귀')
-  
-              self.state = 'IDLE'
-              self.current_order = None
-              self.zone = None
-              self.item = None
-              self.level = DEFAULT_LEVEL
-              self.align_retry_count = 0
-              self.pick_retry_count = 0
-              self.waiting_align_step = False
-              self._pub_state()
-  
-              if self.order_queue:
-                  self.get_logger().info('주차 중 들어온 주문 있음 -> 다음 주문 시작')
-                  self._start_next_order()
+            if self.state != 'GO_PARKING':
+                self.get_logger().warn(
+                    f'parked 수신했지만 현재 상태가 GO_PARKING이 아님: {self.state}'
+                )
+                return
+
+            self.get_logger().info('주차 완료 -> IDLE 복귀')
+            self.get_logger().info('[KPI BRAIN] event=parked result=go_idle')
+
+            self.state = 'IDLE'
+            self.current_order = None
+            self.zone = None
+            self.item = None
+            self.level = DEFAULT_LEVEL
+            self.align_retry_count = 0
+            self.pick_retry_count = 0
+            self.waiting_align_step = False
+            self._pub_state()
+
+            if self.order_queue:
+                self.get_logger().info('주차 중 들어온 주문 있음 -> 다음 주문 시작')
+                self._start_next_order()
 
         else:
             self.get_logger().warn(f'알 수 없는 nav_status: {msg.data}')
@@ -506,6 +531,10 @@ class BrainNode(Node):
             return
 
         self.get_logger().info(f'/observe_ready 수신: {msg.data} (관측 자세 도착)')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=observe_ready state={self.state} '
+            f'data={msg.data} level={self.level}'
+        )
       
         # QR 플레이싱 관측 완료인 경우
         if self.state == 'QR_OBSERVING':
@@ -535,6 +564,11 @@ class BrainNode(Node):
 
         status = msg.data.strip()
         self.get_logger().info(f'/align_status 수신: {status}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=align_status state={self.state} '
+            f'status={status} retry={self.align_retry_count} '
+            f'waiting_align_step={self.waiting_align_step}'
+        )
 
         if status == 'aligned':
             # aligned는 align_node가 "오차 허용범위 안"이라고 판단했다는 뜻.
