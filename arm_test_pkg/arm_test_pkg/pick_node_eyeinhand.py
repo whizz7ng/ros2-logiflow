@@ -33,6 +33,16 @@ try:
 except ImportError:
     raise SystemExit("pymycobot not installed.")
 
+# =========================
+# [신규] QR 플레이싱 관측 자세
+# =========================
+# 목적지 포장구역에 도착한 뒤, QR을 보기 위한 전용 관측 자세.
+# 실제 각도는 현장에서 QR이 잘 보이는 값으로 실측해서 교체할 것.
+QR_OBSERVE_ANGLES = {
+    'A': [-40, 90, -130, -20, 0, -90],
+    'B': [-40, 90, -130, -20, 0, -90],
+    'C': [-40, 90, -130, -20, 0, -90],
+}
 
 # =========================
 # myCobot 기본 설정
@@ -301,38 +311,64 @@ class PickNode(Node):
     # =========================
     def _observe_move_callback(self, msg: String):
         """
-        /observe_move 수신: brain이 "관측할 층"을 보내면
-        해당 층 관측 자세(SHELF_ANGLES)로 send_angles 이동 후
-        /observe_ready 발행.
-        - send_coords가 아니라 send_angles를 쓰는 이유: IK 복수해 때문에
-          send_coords는 같은 목표에 대해 자세가 갈려서 카메라 위치가 불안정해짐.
+        /observe_move 수신:
+          - "1", "2"      : 픽킹용 층별 관측 자세
+          - "qr:A/B/C"    : 플레이싱 QR 관측 자세
         """
         if self.emergency_active:
             self.get_logger().warn("비상정지 상태라 /observe_move 무시")
             return
-
-        level_str = msg.data.strip()
-        try:
-            level = int(level_str)
-        except ValueError:
-            self.get_logger().error(f"/observe_move 층 파싱 실패: '{level_str}'")
+    
+        data = msg.data.strip()
+    
+        # =========================
+        # [신규] QR 플레이싱 관측 자세
+        # =========================
+        if data.startswith("qr:"):
+            zone = data.split(":", 1)[1].strip().upper()
+    
+            if zone not in QR_OBSERVE_ANGLES:
+                self.get_logger().error(f"알 수 없는 QR 관측 구역: '{zone}'")
+                return
+    
+            with self._busy_lock:
+                if self._busy:
+                    self.get_logger().warn("작업 중이라 QR /observe_move 무시")
+                    return
+                self._busy = True
+    
+            threading.Thread(
+                target=self._qr_observe_move_sequence,
+                args=(zone,),
+                daemon=True
+            ).start()
             return
-
+    
+        # =========================
+        # 기존 픽킹용 층별 관측 자세
+        # =========================
+        try:
+            level = int(data)
+        except ValueError:
+            self.get_logger().error(f"/observe_move 파싱 실패: '{data}'")
+            return
+    
         if level not in SHELF_ANGLES:
             self.get_logger().error(f"알 수 없는 층 {level} - 관측 이동 불가")
             return
-          
+    
         self.j1_offset_by_level[level] = 0.0
-
-        # 관측 이동도 하나의 작업이므로 busy 처리 (파지와 중복 방지)
+    
         with self._busy_lock:
             if self._busy:
                 self.get_logger().warn("작업 중이라 /observe_move 무시")
                 return
             self._busy = True
-
+    
         threading.Thread(
-            target=self._observe_move_sequence, args=(level,), daemon=True
+            target=self._observe_move_sequence,
+            args=(level,),
+            daemon=True
         ).start()
 
     def _observe_move_sequence(self, level, j1_offset=0.0):
@@ -370,6 +406,51 @@ class PickNode(Node):
 
         except Exception as e:
             self.get_logger().error(f"관측 이동 오류: {e}")
+            self._pub_pick_status("error")
+        finally:
+            self._finish_task()
+
+  
+    def _qr_observe_move_sequence(self, zone):
+        """
+        QR 플레이싱 관측 자세 이동.
+        목적지 도착 후 QR을 보기 위한 전용 자세로 이동하고,
+        실제 get_coords를 /observe_pose로 발행해서 vision_node의 동적 T를 갱신한다.
+        이후 /observe_ready를 발행하면 brain_node가 /vision_activate: qr_place를 보낸다.
+        """
+        try:
+            if self.emergency_active:
+                return
+    
+            angles = list(QR_OBSERVE_ANGLES[zone])
+    
+            self._log(f"[QR OBSERVE] zone={zone} QR 관측 자세 이동: {[round(a, 1) for a in angles]}")
+            self.mc.send_angles(angles, MOVE_SPEED)
+    
+            if not self._safe_sleep(OBSERVE_SETTLE_WAIT):
+                return
+    
+            # QR 관측 자세에서도 반드시 실제 pose를 발행해야 함.
+            # 그래야 vision_node의 _current_T()가 현재 카메라 자세 기준으로 계산됨.
+            pose = self._safe_get_coords()
+            if pose is None:
+                self._log("[QR OBSERVE] get_coords 실패 - /observe_pose 발행 못 함")
+            else:
+                pm = Float32MultiArray()
+                pm.data = [float(v) for v in pose]
+                self._observe_pose_pub.publish(pm)
+                self._log(f"[QR OBSERVE] 관측 자세 발행: {[round(v, 1) for v in pose]}")
+    
+            # observe_ready 전에 busy 해제
+            self._finish_task()
+    
+            m = String()
+            m.data = "qr_ready"
+            self._observe_ready_pub.publish(m)
+            self._log(f"[QR OBSERVE] zone={zone} QR 관측 자세 도착 -> /observe_ready 발행")
+    
+        except Exception as e:
+            self.get_logger().error(f"QR 관측 이동 오류: {e}")
             self._pub_pick_status("error")
         finally:
             self._finish_task()
