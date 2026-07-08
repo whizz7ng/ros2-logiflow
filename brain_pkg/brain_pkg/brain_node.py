@@ -444,7 +444,7 @@ class BrainNode(Node):
                 f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)'
             )
           
-
+        
         elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
                 self.get_logger().warn(
@@ -465,7 +465,7 @@ class BrainNode(Node):
             )
           
 
-          elif msg.data == 'parked':
+        elif msg.data == 'parked':
               if self.state != 'GO_PARKING':
                   self.get_logger().warn(
                       f'parked 수신했지만 현재 상태가 GO_PARKING이 아님: {self.state}'
