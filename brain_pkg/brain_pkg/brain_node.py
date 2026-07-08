@@ -465,28 +465,28 @@ class BrainNode(Node):
             )
           
 
-         elif msg.data == 'parked':
-            if self.state != 'GO_PARKING':
-                self.get_logger().warn(
-                    f'parked 수신했지만 현재 상태가 GO_PARKING이 아님: {self.state}'
-                )
-                return
-
-            self.get_logger().info('주차 완료 -> IDLE 복귀')
-
-            self.state = 'IDLE'
-            self.current_order = None
-            self.zone = None
-            self.item = None
-            self.level = DEFAULT_LEVEL
-            self.align_retry_count = 0
-            self.pick_retry_count = 0
-            self.waiting_align_step = False
-            self._pub_state()
-
-            if self.order_queue:
-                self.get_logger().info('주차 중 들어온 주문 있음 -> 다음 주문 시작')
-                self._start_next_order()
+          elif msg.data == 'parked':
+              if self.state != 'GO_PARKING':
+                  self.get_logger().warn(
+                      f'parked 수신했지만 현재 상태가 GO_PARKING이 아님: {self.state}'
+                  )
+                  return
+  
+              self.get_logger().info('주차 완료 -> IDLE 복귀')
+  
+              self.state = 'IDLE'
+              self.current_order = None
+              self.zone = None
+              self.item = None
+              self.level = DEFAULT_LEVEL
+              self.align_retry_count = 0
+              self.pick_retry_count = 0
+              self.waiting_align_step = False
+              self._pub_state()
+  
+              if self.order_queue:
+                  self.get_logger().info('주차 중 들어온 주문 있음 -> 다음 주문 시작')
+                  self._start_next_order()
 
         else:
             self.get_logger().warn(f'알 수 없는 nav_status: {msg.data}')
