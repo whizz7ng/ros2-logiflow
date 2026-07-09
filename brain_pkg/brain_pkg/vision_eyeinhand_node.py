@@ -54,6 +54,11 @@ PLACE_RX = -178.0
 PLACE_RY = 0.0
 PLACE_RZ = -90.0
 
+# QR place 거리 기준(mm)
+# 420mm가 마지노선이면, 처음엔 420으로 두고 테스트
+QR_PLACE_MAX_MM = 420.0
+QR_PLACE_MIN_MM = 250.0
+
 # ===== 설정 =====
 MODEL_PATH = '/home/zzz/pj3_ws/src/brain_pkg/brain_pkg/best.pt'
 CONF_THRES = 0.55
@@ -929,11 +934,32 @@ class VisionNode(Node):
         if not qr_found:
             self.get_logger().warn('QR 못 찾음, 재시도')
             return
+          
         dist_m = self._get_qr_place_depth(cx, cy)
         if dist_m <= 0:
             self.get_logger().warn('QR depth 측정 실패(0) - 재시도')
             return
+          
+        dist_mm = dist_m * 1000.0
 
+        if dist_mm > QR_PLACE_MAX_MM:
+            self.get_logger().warn(
+                f"[QR PLACE ALIGN] QR이 너무 멂: {dist_mm:.0f}mm > {QR_PLACE_MAX_MM:.0f}mm "
+                "→ AGV 전진 보정 필요, /place_pose 발행 안 함"
+            )
+            self._pub_dist_status('qr_too_far', dist_mm)
+            self.mode = MODE_IDLE
+            return
+        
+        if dist_mm < QR_PLACE_MIN_MM:
+            self.get_logger().warn(
+                f"[QR PLACE ALIGN] QR이 너무 가까움: {dist_mm:.0f}mm < {QR_PLACE_MIN_MM:.0f}mm "
+                "→ /place_pose 발행 안 함"
+            )
+            self._pub_dist_status('qr_too_close', dist_mm)
+            self.mode = MODE_IDLE
+            return
+          
         fx, fy, ppx, ppy = self.intrinsics
         X = (cx - ppx) / fx * dist_m
         Y = (cy - ppy) / fy * dist_m
@@ -942,7 +968,7 @@ class VisionNode(Node):
         self.get_logger().info(
             f'QR place: zone={zone} 픽셀=({cx},{cy}) dist={dist_m:.3f}m'
         )
-
+      
         cam_pt = np.array([X*1000.0, Y*1000.0, Z*1000.0, 1.0])
         T = self._current_T()
         base_pt = (T @ cam_pt)[:3]
