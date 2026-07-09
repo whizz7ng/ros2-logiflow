@@ -87,6 +87,10 @@ PULSE_YAW_SEC = 0.50
 
 CMD_HZ = 20
 
+# QR place 전용 전진 pulse
+QR_FORWARD_VX = 0.08
+QR_FORWARD_SEC = 0.35
+
 
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
@@ -120,6 +124,10 @@ class AgvAlignNode(Node):
 
         self.create_subscription(
             Float32MultiArray, '/marker_agv_pose', self._marker_callback, 10
+        )
+
+        self.create_subscription(
+            String, '/align_request', self._align_request_callback, 10
         )
 
         self._aligned_stop_sent = 0
@@ -174,6 +182,35 @@ class AgvAlignNode(Node):
             msg.data = 'step_done'
             self._align_status_pub.publish(msg)
             self.get_logger().info('/align_status 발행: step_done')
+
+    def _align_request_callback(self, msg: String):
+        """
+        Brain에서 QR place 거리 보정 요청을 받았을 때,
+        마커 정렬 없이 AGV를 앞으로 짧게 pulse 이동시킨다.
+        """
+        data = msg.data.strip()
+    
+        if data != 'qr_forward':
+            self.get_logger().warn(f'알 수 없는 /align_request: {data}')
+            return
+    
+        if self._step_active:
+            self.get_logger().warn('[QR ALIGN] 이미 보정 이동 중이라 qr_forward 무시')
+            return
+    
+        cmd = Twist()
+        cmd.linear.x = QR_FORWARD_VX
+        cmd.linear.y = 0.0
+        cmd.angular.z = 0.0
+    
+        self.active_cmd = cmd
+        self.cmd_until = time.time() + QR_FORWARD_SEC
+        self._step_active = True
+        self._step_done_sent = False
+    
+        self.get_logger().warn(
+            f'[QR ALIGN] qr_forward 수신 → 전진 pulse vx={QR_FORWARD_VX}, sec={QR_FORWARD_SEC}'
+        )
 
     def _marker_callback(self, msg: Float32MultiArray):
         data = list(msg.data)
