@@ -85,6 +85,9 @@ class BrainNode(Node):
         self._place_target_pub = self.create_publisher(String, '/place_target', 10)
         self._arm_status_pub = self.create_publisher(String, '/arm_status', 10)
         self._go_parking_pub = self.create_publisher(Empty, '/go_parking', 10)
+      
+        # QR place 거리 보정용: agv_align_node에 전진 pulse 요청
+        self._align_request_pub = self.create_publisher(String, '/align_request', 10)
 
         # ===== [수정] 기존 self.__pub = create_publisher(String, '/', 10) 는 토픽명이 '/'로 잘못돼 있었음 =====
         # /wms_update 로 명시적으로 발행하도록 수정
@@ -290,6 +293,38 @@ class BrainNode(Node):
         )
     
         head = status.split(':', 1)[0]
+
+        # ===== [QR PLACE] QR이 너무 멀면 AGV 전진 보정 요청 =====
+        if head == 'qr_too_far':
+            if self.state == 'PLACE_VISION':
+                self.waiting_align_step = True
+        
+                self.get_logger().warn(
+                    f'QR이 너무 멂({status}) → AGV 전진 보정 요청 후 QR 재관측 대기'
+                )
+        
+                self._publish_string(self._align_request_pub, 'qr_forward')
+                self.get_logger().info('/align_request 발행: qr_forward')
+            else:
+                self.get_logger().warn(
+                    f'qr_too_far 수신했지만 현재 상태가 PLACE_VISION 아님: {self.state}'
+                )
+            return
+        
+        # ===== [QR PLACE] QR이 너무 가까우면 자동 후진 금지 =====
+        if head == 'qr_too_close':
+            if self.state == 'PLACE_VISION':
+                self.get_logger().error(
+                    f'QR이 너무 가까움({status}) → 후진은 위험하므로 ERROR 처리'
+                )
+                self.waiting_align_step = False
+                self.state = 'ERROR'
+                self._pub_state()
+            else:
+                self.get_logger().warn(
+                    f'qr_too_close 수신했지만 현재 상태가 PLACE_VISION 아님: {self.state}'
+                )
+            return
       
         # depth 실패: vision이 물체 depth를 못 얻어서 ArUco 기반 AGV 보정을 요청한 상태
         if head == 'depth_fail':
@@ -676,7 +711,27 @@ class BrainNode(Node):
                 '→ 늦은/불필요한 step_done으로 보고 무시'
             )
             return
-
+          
+        # ===== [QR PLACE] QR 거리 보정 step_done 처리 =====
+        if self.state == 'PLACE_VISION':
+            self.waiting_align_step = False
+            self.align_retry_count += 1
+        
+            zone = self.zone if self.zone else 'A'
+        
+            self.get_logger().warn(
+                f'QR 전진 보정 완료 step_done → QR 재관측 {self.align_retry_count}회'
+            )
+        
+            self.state = 'QR_OBSERVING'
+            self._pub_state()
+        
+            self._publish_string(self._observe_move_pub, f'qr:{zone}')
+            self.get_logger().info(
+                f'/observe_move 재발행: qr:{zone} (QR 전진 보정 후 재관측)'
+            )
+            return
+          
         # 차체 보정은 vision 단계에서만 의미 있음
         if self.state != 'VISION':
             self.get_logger().warn(
