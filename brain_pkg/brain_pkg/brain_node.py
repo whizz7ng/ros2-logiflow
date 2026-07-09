@@ -282,6 +282,19 @@ class BrainNode(Node):
         )
     
         head = status.split(':', 1)[0]
+      
+        # depth 실패: vision이 물체 depth를 못 얻어서 ArUco 기반 AGV 보정을 요청한 상태
+        if head == 'depth_fail':
+            if self.state == 'VISION':
+                self.waiting_align_step = True
+                self.get_logger().warn(
+                    'depth_fail 수신 → ArUco 기반 AGV 보정 후 step_done 대기'
+                )
+            else:
+                self.get_logger().warn(
+                    f'depth_fail 수신했지만 현재 상태가 VISION 아님: {self.state}'
+                )
+            return
     
         # 너무 가까움: 후진 금지라 자동 보정 불가
         if head == 'too_close':
