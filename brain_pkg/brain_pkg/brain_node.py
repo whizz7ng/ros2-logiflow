@@ -100,16 +100,6 @@ class BrainNode(Node):
         # True일 때만 /align_status step_done을 처리한다 (VISION/PLACE_VISION 단계용).
         self.waiting_align_step = False
 
-        # ===== [신규] FRONTAL_ALIGN 무한대기 방지용 타임아웃 =====
-        # 마커가 계속 하나도 안 보이면 agv_align_node가 'aligned'를 영영 안 보내서
-        # FRONTAL_ALIGN에 멈춰버릴 수 있음. 일정 시간 지나면 정면정렬을 포기하고
-        # (틀어진 채로라도) 블록 검출로 넘어간다.
-        self.FRONTAL_ALIGN_TIMEOUT_SEC = 6.0
-        self.frontal_align_entered_time = None
-        self._frontal_align_timeout_timer = self.create_timer(
-            0.5, self._check_frontal_align_timeout
-        )
-
         self.get_logger().info('brain_node 시작 - 상태: IDLE')
         self._pub_state()
 
@@ -631,7 +621,6 @@ class BrainNode(Node):
         # 먼저 FRONTAL_ALIGN(마커 정면정렬)부터 수행 =====
         if self.state == 'OBSERVING':
             self.state = 'FRONTAL_ALIGN'
-            self.frontal_align_entered_time = time.time()
             self._pub_state()
 
             self._publish_string(self._vision_activate_pub, f'marker_align:{self.level}')
@@ -644,45 +633,6 @@ class BrainNode(Node):
         activate_data = f'{self.item}:{self.level}'
         self._publish_string(self._vision_activate_pub, activate_data)
         self.get_logger().info(f'/vision_activate 발행: {activate_data}')
-
-    # ===== [신규] FRONTAL_ALIGN 무한대기 방지 타임아웃 =====
-    def _check_frontal_align_timeout(self):
-        """
-        마커가 계속 하나도 안 보이면 agv_align_node가 'aligned'를 영영 안 보내서
-        FRONTAL_ALIGN에 멈춰버릴 수 있음.
-
-        [판단] 이 시스템의 관측 거리(GRASP_DEPTH_RANGE 기준 약 20~45cm)는
-        짧아서 "너무 멀어서 마커가 안 보이는" 상황은 거의 없다고 보고,
-        마커가 계속 안 보이면 실제로는 AGV가 심하게 틀어졌거나(yaw) 좌우로
-        너무 벗어난 상황으로 판단한다. 어느 쪽인지 정보가 없는 채로 회전이나
-        전진을 억지로 시도하면 랙에 더 가까워지거나 더 벗어날 위험이 있어서,
-        여기서는 블록 검출을 강행하지 않고 ERROR로 멈춰서 사람이 개입하게 한다.
-        """
-        if self.emergency_active:
-            return
-        if self.state != 'FRONTAL_ALIGN' or self.frontal_align_entered_time is None:
-            return
-
-        elapsed = time.time() - self.frontal_align_entered_time
-        if elapsed < self.FRONTAL_ALIGN_TIMEOUT_SEC:
-            return
-
-        self.get_logger().error(
-            f'[정면정렬] {elapsed:.1f}s 동안 마커가 전혀 안 보임 '
-            f'(AGV가 심하게 틀어졌거나 벗어난 것으로 추정) → 자동 복구 불가, ERROR'
-        )
-        self.get_logger().info(
-            f'[KPI BRAIN] event=frontal_align_timeout elapsed={elapsed:.1f} '
-            f'level={self.level} result=error'
-        )
-
-        self.frontal_align_entered_time = None
-        self.waiting_align_step = False
-        self.state = 'ERROR'
-        self._pub_state()
-
-        # vision을 정지시켜서 marker_align 모드로 계속 프레임 처리하지 않게 함
-        self._publish_string(self._vision_activate_pub, 'stop')
 
     # ===== AGV 정렬 관련 신호 처리 (정면정렬 완료 / 펄스 1스텝 완료) =====
     def _align_status_callback(self, msg):
@@ -704,7 +654,6 @@ class BrainNode(Node):
             # ===== [신규] FRONTAL_ALIGN 단계 완료 → 곧바로 블록 검출 시작 =====
             if self.state == 'FRONTAL_ALIGN':
                 self.get_logger().info('정면정렬 완료(aligned) → 블록 검출 시작')
-                self.frontal_align_entered_time = None
                 self.state = 'VISION'
                 self._pub_state()
 
@@ -819,7 +768,6 @@ class BrainNode(Node):
         self.emergency_active = True
         self.state = 'EMERGENCY_STOP'
         self.waiting_align_step = False
-        self.frontal_align_entered_time = None
         self._pub_state()
 
         self._publish_string(self._vision_activate_pub, 'stop')
