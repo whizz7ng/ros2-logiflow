@@ -103,8 +103,12 @@ class AgvAlignNode(Node):
         self.create_subscription(
             String, '/align_request', self._align_request_callback, 10
         )
+        self.create_subscription(
+            String, '/brain_state', self._brain_state_callback, 10
+        )
 
         self._frontal_stop_sent = 0
+        self.brain_state = 'IDLE'
 
         # ===== [펄스 이동 상태] =====
         self.active_cmd = Twist()
@@ -149,6 +153,9 @@ class AgvAlignNode(Node):
             f'wz={tw.angular.z:.3f}) for {pulse_sec:.2f}s'
         )
 
+    def _brain_state_callback(self, msg: String):
+        self.brain_state = msg.data.strip()
+    
     # =========================
     # [블록 기반 x/y 보정] /align_request 처리
     # =========================
@@ -184,7 +191,15 @@ class AgvAlignNode(Node):
     # [정면정렬] /marker_agv_pose 처리 - STAGE1만 수행
     # =========================
     def _marker_callback(self, msg: Float32MultiArray):
+        if self.brain_state != 'FRONTAL_ALIGN':
+            self.get_logger().info(
+                f'/marker_agv_pose 수신했지만 brain_state={self.brain_state} '
+                '→ 정면정렬 단계가 아니므로 무시'
+            )
+            return
+    
         data = list(msg.data)
+      
         if len(data) != 7:
             self.get_logger().warn(
                 f'/marker_agv_pose 7개 아님(구버전 vision?): {len(data)} - 무시'
