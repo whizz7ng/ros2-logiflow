@@ -127,7 +127,7 @@ DESCEND_SPEED = 8
 # [신규] 피드백 대기 관련 설정
 # =========================
 # send_angles 이동 후 도달 확인 타임아웃(초). 기존 sleep 값 + 여유.
-WAIT_ANGLES_TIMEOUT = 8.0
+WAIT_ANGLES_TIMEOUT = 15.0
 # send_coords 이동 후 도달 확인 타임아웃(초).
 WAIT_COORDS_TIMEOUT = 8.0
 # 도달 확인 후 진동/떨림 안정화 대기(초)
@@ -255,7 +255,12 @@ class PickNode(Node):
         반환값: True = 도달 확인, False = 타임아웃 또는 비상정지로 중단
         """
         t0 = time.time()
-        use_fallback = False
+
+        # myCobot280 Pi에서 각도 이동(mode=0)은 is_in_position()이 -1을 자주 반환하므로
+        # 처음부터 get_angles() 기반 diff 확인으로 진행한다.
+        # 좌표 이동(mode=1)은 기존처럼 is_in_position()을 먼저 시도한다.
+        use_fallback = True if mode == 0 else False
+        
         bad_read_count = 0
 
         while time.time() - t0 < timeout:
@@ -302,6 +307,14 @@ class PickNode(Node):
                     tol_pos = 2.0 if mode == 0 else 3.0   # deg 또는 mm
                     tol_rot = 2.0 if mode == 0 else 5.0
                     diffs = [abs(c - t) for c, t in zip(cur, target)]
+
+                    self.get_logger().info(
+                        f"[WAIT DEBUG] mode={mode} "
+                        f"cur={[round(v, 1) for v in cur]} "
+                        f"target={[round(v, 1) for v in target]} "
+                        f"diff={[round(v, 1) for v in diffs]}"
+                    )
+                  
                     if all(d <= tol_pos for d in diffs[:3]) and all(d <= tol_rot for d in diffs[3:]):
                         if not self._safe_sleep(settle):
                             return False
