@@ -237,11 +237,11 @@ class AgvAlignNode(Node):
                     f'(ex={err_x:.0f} ey={err_y:.0f} eyaw={err_yaw:.0f}) - 정지'
                 )
 
-            # 정렬 완료도 brain이 다음 단계 판단할 수 있게 step_done 발행
+            # 이미 정렬 완료 상태임을 brain에 알림
             msg = String()
-            msg.data = 'step_done'
+            msg.data = 'aligned'
             self._align_status_pub.publish(msg)
-            self.get_logger().info('/align_status 발행: step_done (already aligned)')
+            self.get_logger().info('/align_status 발행: aligned (already aligned)')
             return
 
         self._aligned_stop_sent = 0
@@ -363,17 +363,15 @@ class AgvAlignNode(Node):
 
         else:
             # 거의 맞은 상태
-            self._publish_stop()
-
             msg = String()
-            msg.data = 'step_done'
+            msg.data = 'aligned'
             self._align_status_pub.publish(msg)
-
+            
             self.get_logger().info(
                 f'[정렬] 완료 L{level} '
                 f'(ex={err_x:.0f} ey={err_y:.0f} eyaw={err_yaw:.0f}) - 정지'
             )
-            self.get_logger().info('/align_status 발행: step_done (already aligned)')
+            self.get_logger().info('/align_status 발행: aligned (already aligned)')
             return
         
         # ---- pulse 시작 ----
