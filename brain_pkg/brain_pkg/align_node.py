@@ -68,6 +68,13 @@ ALIGN_WZ = 0.41
 BLOCK_FORWARD_VX = 0.08
 BLOCK_FORWARD_SEC = 0.35
 
+# ===== [신규] 마커가 둘 다 안 보일 때 - 보일 때까지 무제한 전진 =====
+# (관측 거리가 짧게 설계돼 있어서, 마커가 안 보이는 주된 이유는
+#  "너무 삐딱함"보다는 "너무 멀어서(nav가 일찍 멈춤)"인 경우가 실제로 있음.
+#  횟수/시간 제한 없이 보일 때까지 계속 전진 pulse.)
+NO_MARKER_FORWARD_VX = 0.08
+NO_MARKER_FORWARD_SEC = 0.35
+
 # 부호가 반대로 움직이면 아래만 바꿀 것.
 SIGN_Y = 1.0
 BLOCK_LEFT_SIGN  = -1.0   # block_left 요청 시 y 부호
@@ -197,8 +204,19 @@ class AgvAlignNode(Node):
         has_right_yaw = not math.isnan(ryaw)
 
         if not has_left_yaw and not has_right_yaw:
-            self.get_logger().warn('[정렬] 마커 yaw 없음(마커 안 보이거나 계산 실패) - 정지')
-            self._publish_stop()
+            # [변경] 마커가 둘 다 안 보이면 정지하지 않고, 보일 때까지
+            # 무제한으로 전진 pulse를 반복한다. (관측 거리가 짧게 설계돼
+            # 있어서, 안 보이는 주된 이유가 "너무 멀어서"인 경우가 실제로
+            # 있다고 판단 - 삐딱함/좌우이탈이면 markers가 아예 안 보이기보다
+            # 일부라도 보이는 경우가 많음)
+            if self._step_active and time.time() < self.cmd_until:
+                return
+            tw = Twist()
+            tw.linear.x = NO_MARKER_FORWARD_VX
+            self._start_pulse(
+                tw, NO_MARKER_FORWARD_SEC,
+                f'[정렬] L{level} 마커 둘 다 안 보임 → 전진 pulse(무제한 반복)'
+            )
             return
 
         # 이미 펄스 중이면 새 값 무시 (이동 중 흔들림으로 값 튀는 것 방지)
