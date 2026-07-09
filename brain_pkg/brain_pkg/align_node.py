@@ -262,26 +262,59 @@ class AgvAlignNode(Node):
         axis = 'none'
         pulse_sec = 0.0
         
-        # 0순위: 마커가 하나만 보일 때 yaw 복구
-        # 오른쪽 마커만 보이면 왼쪽으로 회전
-        # 왼쪽 마커만 보이면 오른쪽으로 회전
+        # 0순위: 마커가 하나만 보일 때
+        # 한쪽 마커만 보여도 해당 마커의 y 오차는 계산 가능하다.
+        # y 오차가 크면 먼저 좌우 보정으로 양쪽 마커가 같이 보이게 만들고,
+        # y가 어느 정도 맞았는데도 한쪽만 보이면 yaw 복구를 수행한다.
         if has_right and not has_left:
-            axis = 'single_marker_yaw_left'
-            tw.angular.z = SIGN_SINGLE_MARKER_YAW * SINGLE_MARKER_WZ
-            pulse_sec = SINGLE_MARKER_YAW_SEC
-
-            self.get_logger().warn(
-                '[정렬] 오른쪽 마커만 보임 → 왼쪽 회전으로 yaw 복구'
-            )
-
+            if abs(err_y) >= TOL_XY:
+                axis = 'single_marker_y'
+        
+                raw_vy = GAIN_Y * err_y
+                if raw_vy > 0:
+                    tw.linear.y = SIGN_Y * ALIGN_VY
+                else:
+                    tw.linear.y = -SIGN_Y * ALIGN_VY
+        
+                pulse_sec = PULSE_Y_SEC
+        
+                self.get_logger().warn(
+                    f'[정렬] 오른쪽 마커만 보임 + y 오차 큼(err_y={err_y:.0f}) '
+                    f'→ y축 보정 먼저'
+                )
+            else:
+                axis = 'single_marker_yaw_left'
+                tw.angular.z = SIGN_SINGLE_MARKER_YAW * SINGLE_MARKER_WZ
+                pulse_sec = SINGLE_MARKER_YAW_SEC
+        
+                self.get_logger().warn(
+                    '[정렬] 오른쪽 마커만 보임 + y 오차 작음 → 왼쪽 회전으로 yaw 복구'
+                )
+        
         elif has_left and not has_right:
-            axis = 'single_marker_yaw_right'
-            tw.angular.z = -SIGN_SINGLE_MARKER_YAW * SINGLE_MARKER_WZ
-            pulse_sec = SINGLE_MARKER_YAW_SEC
-
-            self.get_logger().warn(
-                '[정렬] 왼쪽 마커만 보임 → 오른쪽 회전으로 yaw 복구'
-            )
+            if abs(err_y) >= TOL_XY:
+                axis = 'single_marker_y'
+        
+                raw_vy = GAIN_Y * err_y
+                if raw_vy > 0:
+                    tw.linear.y = SIGN_Y * ALIGN_VY
+                else:
+                    tw.linear.y = -SIGN_Y * ALIGN_VY
+        
+                pulse_sec = PULSE_Y_SEC
+        
+                self.get_logger().warn(
+                    f'[정렬] 왼쪽 마커만 보임 + y 오차 큼(err_y={err_y:.0f}) '
+                    f'→ y축 보정 먼저'
+                )
+            else:
+                axis = 'single_marker_yaw_right'
+                tw.angular.z = -SIGN_SINGLE_MARKER_YAW * SINGLE_MARKER_WZ
+                pulse_sec = SINGLE_MARKER_YAW_SEC
+        
+                self.get_logger().warn(
+                    '[정렬] 왼쪽 마커만 보임 + y 오차 작음 → 오른쪽 회전으로 yaw 복구'
+                )
 
         # 1순위: 양쪽 마커가 모두 보일 때 기존 yaw 보정
         elif has_left and has_right and abs(err_yaw) >= TOL_YAW:
