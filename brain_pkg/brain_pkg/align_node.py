@@ -41,7 +41,7 @@ from geometry_msgs.msg import Twist
 
 
 SINGLE_MARKER_YAW_SEC = 0.25
-SINGLE_MARKER_WZ = 0.12
+SINGLE_MARKER_WZ = 0.41
 
 # 방향이 반대로 돌면 이 값만 -1.0으로 바꾸면 됨
 SIGN_SINGLE_MARKER_YAW = 1.0
