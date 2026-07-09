@@ -38,6 +38,7 @@ brain_node.py  (eye-in-hand 관측 흐름 + AGV align 재관측 + pick_failed �
 
 from collections import deque
 import time
+import re
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray, Empty
@@ -149,10 +150,17 @@ class BrainNode(Node):
 
         level = DEFAULT_LEVEL
         if len(parts) >= 3 and parts[2].strip():
-            try:
-                level = int(parts[2].strip())
-            except ValueError:
-                self.get_logger().warn(f'층 파싱 실패("{parts[2]}") -> 기본 {DEFAULT_LEVEL}층')
+            level_raw = parts[2].strip()
+        
+            # "2", "2층", "level2", "층2" 같은 문자열에서 숫자만 추출
+            m = re.search(r'\d+', level_raw)
+        
+            if m:
+                level = int(m.group())
+            else:
+                self.get_logger().warn(
+                    f'층 파싱 실패("{level_raw}") -> 기본 {DEFAULT_LEVEL}층'
+                )
                 level = DEFAULT_LEVEL
 
         if level not in VALID_LEVELS:
