@@ -49,9 +49,10 @@ MARKER_ID_RIGHT = 1
 # ===== [정면(yaw) 정렬 기준값 - 실측 필요] =====
 # 각 층 정상 정차에서 vision이 계산한 마커별 yaw(deg, AGV base 기준)를
 # /marker_agv_pose 에서 echo해서 넣는다.
+
 YAW_TARGET = {
-    1: {MARKER_ID_LEFT: 0.0, MARKER_ID_RIGHT: 0.0},   # TODO: 1층 실측
-    2: {MARKER_ID_LEFT: 0.0, MARKER_ID_RIGHT: 0.0},   # TODO: 2층 실측
+    1: {MARKER_ID_LEFT: -89.5, MARKER_ID_RIGHT: -88.5}, #1층 실측(marker_agv_pose)
+    2: {MARKER_ID_LEFT: -86.8, MARKER_ID_RIGHT: -89.4}, #2층 실측(marker_agv_pose)
 }
 
 # 정면정렬 허용 오차(deg) / 회전 게인(부호 판단용) / 펄스 시간
