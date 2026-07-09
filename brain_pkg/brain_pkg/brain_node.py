@@ -2,38 +2,43 @@
 # -*- coding: utf-8 -*-
 
 """
-brain_node.py  (eye-in-hand 관측 흐름 + AGV align 재관측 + pick_failed 재관측 버전)
+brain_node.py  (eye-in-hand 관측 흐름 + 정면정렬(FRONTAL_ALIGN) + 블록기반 x/y보정 버전)
 
-[eye-in-hand 변경 요약]
-  (1) 주문 포맷에 층(level) 추가: "물품:구역:층"  예) "red_cross:A:1"
-      - 층 없으면 기본 1층 (하위호환)
-  (2) VISION 진입 시 곧바로 /vision_activate 하지 않고,
-      먼저 pick_node에 관측 자세로 가라고 명령(/observe_move) →
-      pick_node가 도착 신호(/observe_ready) 보내면 그때 /vision_activate 발행.
-      (카메라가 그리퍼에 붙어서, 팔이 관측 자세에 있어야 vision 좌표계산이 맞음)
-  (3) /vision_activate 포맷: "item:level" (vision_node가 층별 T_cam2base 선택)
+[변경 요약 - 이번 세션]
+  기존에는 vision이 too_far/too_close/depth_fail일 때 마커의 고정 TARGET
+  좌표와 비교해서 agv_align_node가 x/y까지 정밀 보정했음.
+  이제는:
+    1) 관측 자세 도착 직후 -> FRONTAL_ALIGN 상태로 먼저 마커 정면(yaw) 정렬만 수행.
+       (agv_align_node가 마커 하나만 보여도 rvec 기반 yaw로 이 작업을 함)
+       정면 정렬 끝나면(/align_status "aligned") 곧바로 블록 검출(VISION) 시작.
+    2) VISION 상태에서 블록을 찾았는데 파지범위 밖(too_far)이면
+       -> /align_request "block_forward" 로 AGV 전진 요청 (마커 TARGET 안 씀).
+       too_close는 기존과 동일하게 후진 금지 정책이라 ERROR.
+    3) 블록은 파지범위 안인데 화면 중앙에서 너무 치우쳐 있으면(distance_status
+       "side_left"/"side_right", 신규) -> /align_request "block_left"/"block_right".
+    4) 2),3) 보정 후 step_done을 받으면 다시 관측 자세부터(=다시 정면정렬부터) 반복.
 
-[AGV align 변경 요약]
-  vision_node가 depth 없음/too_far/too_close 등으로 /marker_agv_pose를 발행하면,
-  agv_align_node가 /agv_align을 짧게 발행해 AGV를 한 번 보정 이동시킨다.
-  이동이 끝나면 agv_align_node가 /align_status "step_done"을 발행한다.
-  brain_node는 step_done을 받으면 다시 /observe_move부터 시작해서 새 관측을 수행한다.
+[eye-in-hand 요약 - 기존 유지]
+  (1) 주문 포맷에 층(level) 추가: "물품:구역:층"
+  (2) VISION 진입 전 pick_node에 관측 자세로 이동 명령(/observe_move) ->
+      도착 신호(/observe_ready) 받으면 그때부터 진행.
+  (3) /vision_activate 포맷: "item:level" (블록 검출),
+      "marker_align:level" (신규, 정면정렬 전용), "qr_place"
 
-[AGV align 안정화 추가]
-  /distance_status too_close/too_far 를 받은 경우에만
-  /align_status step_done을 유효한 보정 완료 신호로 처리한다.
-  /distance_status ok 이후 뒤늦게 들어오는 step_done은 무시한다.
-  이렇게 해야 /box_pose와 /align_status가 거의 동시에 들어올 때 FSM이 꼬이지 않는다.
-
-[pick_failed 변경 요약]
+[pick_failed 요약 - 기존 유지]
   pick_node가 파지 실패 시 /pick_status "pick_failed"를 발행하면,
   brain_node는 바로 ERROR로 가지 않고 observe_move부터 한 번 더 재관측한다.
+  (재관측은 다시 FRONTAL_ALIGN부터 시작됨)
 
-새 토픽:
+토픽:
   /observe_move    (String) brain -> pick : 관측할 층 번호 "1"/"2"
   /observe_ready   (String) pick -> brain : 관측 자세 도착 완료 "ready"
-  /distance_status (String) vision -> brain : 거리 상태 "ok:311" / "too_close:239" / "too_far:360"
-  /align_status    (String) agv_align -> brain : AGV 보정 1스텝 완료 "step_done", 정렬완료 "aligned"
+  /distance_status (String) vision -> brain : "ok:311" / "too_close:239" /
+                    "too_far:360" / "side_left:280" / "side_right:280"(신규) /
+                    "depth_fail:0" / "qr_too_far:.." / "qr_too_close:.."
+  /align_status    (String) agv_align -> brain : "step_done" / "aligned"
+  /align_request   (String) brain -> agv_align : "qr_forward" / "block_forward" /
+                    "block_left" / "block_right" (신규 3개)
 """
 
 from collections import deque
@@ -44,14 +49,6 @@ from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray, Empty
 
 
-# # 포장구역별 로봇팔 플레이싱 좌표 (실측값으로 교체 필요)
-# ZONE_TO_PLACE = {
-#     'A': [200.0, 100.0, 80.0, 175.35, -1.1, -89.73],
-#     'B': [200.0, 150.0, 80.0, 175.35, -1.1, -89.73],
-#     'C': [200.0, 200.0, 80.0, 175.35, -1.1, -89.73],
-# }
-
-# ===== [신규] 유효 층 목록 (vision_node의 SHELF_POSES 키와 일치해야 함) =====
 VALID_LEVELS = {1, 2}
 DEFAULT_LEVEL = 1
 
@@ -67,15 +64,8 @@ class BrainNode(Node):
         self.create_subscription(String, '/pick_status', self._pick_status_callback, 10)
         self.create_subscription(String, '/nav_status', self._nav_status_callback, 10)
         self.create_subscription(String, '/emergency_stop', self._emergency_stop_callback, 10)
-
-        # ===== [신규] vision_node의 거리 상태 =====
-        # too_close/too_far일 때만 AGV align step_done을 유효하게 처리하기 위함
         self.create_subscription(String, '/distance_status', self._distance_status_callback, 10)
-
-        # ===== [신규] pick_node의 관측 자세 도착 신호 =====
         self.create_subscription(String, '/observe_ready', self._observe_ready_callback, 10)
-
-        # ===== [신규] agv_align_node의 차체 보정 1스텝 완료 신호 =====
         self.create_subscription(String, '/align_status', self._align_status_callback, 10)
 
         # Publishers
@@ -85,17 +75,9 @@ class BrainNode(Node):
         self._place_target_pub = self.create_publisher(String, '/place_target', 10)
         self._arm_status_pub = self.create_publisher(String, '/arm_status', 10)
         self._go_parking_pub = self.create_publisher(Empty, '/go_parking', 10)
-      
-        # QR place 거리 보정용: agv_align_node에 전진 pulse 요청
         self._align_request_pub = self.create_publisher(String, '/align_request', 10)
-
-        # ===== [수정] 기존 self.__pub = create_publisher(String, '/', 10) 는 토픽명이 '/'로 잘못돼 있었음 =====
-        # /wms_update 로 명시적으로 발행하도록 수정
         self._wms_update_pub = self.create_publisher(String, '/wms_update', 10)
-
         self._brain_state_pub = self.create_publisher(String, '/brain_state', 10)
-
-        # ===== [신규] 관측 자세 이동 명령 =====
         self._observe_move_pub = self.create_publisher(String, '/observe_move', 10)
 
         # Internal states
@@ -109,18 +91,24 @@ class BrainNode(Node):
         self.order_start_time = None
         self.order_start_order = None
 
-        # ===== [신규] AGV 차체 보정 재관측 제한 =====
         self.align_retry_count = 0
         self.ALIGN_RETRY_MAX = 20
 
-        # ===== [신규] pick 실패 시 재관측 제한 =====
         self.pick_retry_count = 0
         self.PICK_REOBSERVE_MAX = 1
 
-        # ===== [신규] 현재 AGV 차체 보정 step_done을 기다리는 중인지 =====
-        # True일 때만 /align_status step_done을 처리한다.
-        # False면 이전 step_done이 늦게 들어온 것으로 보고 무시한다.
+        # True일 때만 /align_status step_done을 처리한다 (VISION/PLACE_VISION 단계용).
         self.waiting_align_step = False
+
+        # ===== [신규] FRONTAL_ALIGN 무한대기 방지용 타임아웃 =====
+        # 마커가 계속 하나도 안 보이면 agv_align_node가 'aligned'를 영영 안 보내서
+        # FRONTAL_ALIGN에 멈춰버릴 수 있음. 일정 시간 지나면 정면정렬을 포기하고
+        # (틀어진 채로라도) 블록 검출로 넘어간다.
+        self.FRONTAL_ALIGN_TIMEOUT_SEC = 6.0
+        self.frontal_align_entered_time = None
+        self._frontal_align_timeout_timer = self.create_timer(
+            0.5, self._check_frontal_align_timeout
+        )
 
         self.get_logger().info('brain_node 시작 - 상태: IDLE')
         self._pub_state()
@@ -140,11 +128,6 @@ class BrainNode(Node):
         publisher.publish(msg)
 
     def _parse_order(self, order):
-        """
-        ===== [변경] 주문 형식: "물품:구역:층"  예) "red_cross:A:1"
-        - 층 생략 시 기본 1층 (하위호환): "red_cross:A"
-        - 구역/층 모두 생략 시: "red_cross" -> zone='A', level=1
-        """
         order = order.strip()
         parts = order.split(':')
 
@@ -154,10 +137,7 @@ class BrainNode(Node):
         level = DEFAULT_LEVEL
         if len(parts) >= 3 and parts[2].strip():
             level_raw = parts[2].strip()
-        
-            # "2", "2층", "level2", "층2" 같은 문자열에서 숫자만 추출
             m = re.search(r'\d+', level_raw)
-        
             if m:
                 level = int(m.group())
             else:
@@ -182,20 +162,15 @@ class BrainNode(Node):
             return
 
         self.current_order = self.order_queue.popleft()
-      
-        # ===== [KPI TIME] 큐에서 실제 작업 시작 시각 기록 =====
-        # 작업 중 들어온 주문은 _order_callback 시점이 아니라,
-        # 큐에서 꺼내 실제 시작되는 이 시점을 cycle start로 본다.
+
         self.order_start_time = time.time()
         self.order_start_order = self.current_order
         self.get_logger().info(
             f"[KPI TIME] cycle_start order={self.order_start_order}"
         )
 
-        # ===== [변경] 층까지 파싱 =====
         self.item, self.zone, self.level = self._parse_order(self.current_order)
 
-        # 새 주문 시작 시 보정/재시도 카운터 초기화
         self.align_retry_count = 0
         self.pick_retry_count = 0
         self.waiting_align_step = False
@@ -218,7 +193,6 @@ class BrainNode(Node):
     def _finish_current_order(self):
         self.get_logger().info(f'현재 주문 완료: {self.current_order}')
 
-        # ===== [수정] 올바른 /wms_update 퍼블리셔 사용 =====
         w_msg = String()
         w_msg.data = f'{self.item}:{self.zone}:done'
         self._wms_update_pub.publish(w_msg)
@@ -254,9 +228,7 @@ class BrainNode(Node):
 
         self.get_logger().info(f'주문 수신: {msg.data}')
         self.order_queue.append(msg.data)
-      
-        # ===== [KPI TIME] 주문 수신 시각 기록 =====
-        # IDLE 상태에서 바로 시작되는 주문이면 이 시점을 cycle start로 본다.
+
         if self.state == 'IDLE' and self.order_start_time is None:
             self.order_start_time = time.time()
             self.order_start_order = msg.data.strip()
@@ -274,35 +246,36 @@ class BrainNode(Node):
 
     def _distance_status_callback(self, msg):
         """
-        vision_node의 거리 판정 결과 수신.
-        - too_far: 아직 멀다 → AGV 전진 보정 후 재관측 반복
-        - too_close: 너무 가깝다 → 후진 금지 정책이므로 자동 보정 중단
-        - ok: 정상 파지 가능 거리 → /box_pose 대기
+        vision_node의 거리/중심 판정 결과 수신.
+          - too_far: 파지범위보다 멀다 -> AGV 전진 보정(block_forward) 요청 후 재관측
+          - too_close: 너무 가깝다 -> 후진 금지 정책이라 자동 보정 중단(ERROR)
+          - side_left/side_right(신규): 화면 중앙에서 치우침 -> AGV 좌/우 보정
+            (block_left/block_right) 요청 후 재관측
+          - depth_fail: depth 자체를 못 얻음 -> ArUco 마커 기반 정면 재확인 대기
+          - ok: 정상 파지 가능 거리+중앙 -> /box_pose 대기
         """
         if self.emergency_active:
             self.get_logger().warn(
                 f'/distance_status 수신했지만 비상정지 상태라 무시: {msg.data}'
             )
             return
-    
+
         status = msg.data.strip()
         self.get_logger().info(f'/distance_status 수신: {status}')
         self.get_logger().info(
             f'[KPI BRAIN] event=distance_status state={self.state} '
             f'status={status} waiting_align_step={self.waiting_align_step}'
         )
-    
+
         head = status.split(':', 1)[0]
 
         # ===== [QR PLACE] QR이 너무 멀면 AGV 전진 보정 요청 =====
         if head == 'qr_too_far':
             if self.state == 'PLACE_VISION':
                 self.waiting_align_step = True
-        
                 self.get_logger().warn(
                     f'QR이 너무 멂({status}) → AGV 전진 보정 요청 후 QR 재관측 대기'
                 )
-        
                 self._publish_string(self._align_request_pub, 'qr_forward')
                 self.get_logger().info('/align_request 발행: qr_forward')
             else:
@@ -310,7 +283,7 @@ class BrainNode(Node):
                     f'qr_too_far 수신했지만 현재 상태가 PLACE_VISION 아님: {self.state}'
                 )
             return
-        
+
         # ===== [QR PLACE] QR이 너무 가까우면 자동 후진 금지 =====
         if head == 'qr_too_close':
             if self.state == 'PLACE_VISION':
@@ -325,20 +298,20 @@ class BrainNode(Node):
                     f'qr_too_close 수신했지만 현재 상태가 PLACE_VISION 아님: {self.state}'
                 )
             return
-      
-        # depth 실패: vision이 물체 depth를 못 얻어서 ArUco 기반 AGV 보정을 요청한 상태
+
+        # depth 실패
         if head == 'depth_fail':
             if self.state == 'VISION':
                 self.waiting_align_step = True
                 self.get_logger().warn(
-                    'depth_fail 수신 → ArUco 기반 AGV 보정 후 step_done 대기'
+                    'depth_fail 수신 → ArUco 기반 정면 재확인 후 step_done/aligned 대기'
                 )
             else:
                 self.get_logger().warn(
                     f'depth_fail 수신했지만 현재 상태가 VISION 아님: {self.state}'
                 )
             return
-    
+
         # 너무 가까움: 후진 금지라 자동 보정 불가
         if head == 'too_close':
             if self.state == 'VISION':
@@ -353,29 +326,46 @@ class BrainNode(Node):
                     f'too_close 수신했지만 현재 상태가 VISION 아님: {self.state}'
                 )
             return
-          
-    
-        # 너무 멂: 전진 보정 반복 허용
+
+        # 너무 멂: AGV 전진 보정 요청
         if head == 'too_far':
             if self.state == 'VISION':
                 self.waiting_align_step = True
                 self.get_logger().warn(
-                    f'거리 너무 멂({status}) → AGV 전진 보정 후 step_done 대기'
+                    f'거리 너무 멂({status}) → AGV 전진 보정(block_forward) 요청 후 step_done 대기'
                 )
+                self._publish_string(self._align_request_pub, 'block_forward')
+                self.get_logger().info('/align_request 발행: block_forward')
             else:
                 self.get_logger().warn(
                     f'too_far 수신했지만 현재 상태가 VISION 아님: {self.state}'
                 )
             return
-    
-        # 정상 거리: box_pose 대기
+
+        # ===== [신규] 블록이 화면 중앙에서 너무 치우침 → AGV 좌/우 보정 요청 =====
+        if head in ('side_left', 'side_right'):
+            if self.state == 'VISION':
+                self.waiting_align_step = True
+                req = 'block_left' if head == 'side_left' else 'block_right'
+                self.get_logger().warn(
+                    f'블록 중심 치우침({status}) → AGV {req} 보정 요청 후 step_done 대기'
+                )
+                self._publish_string(self._align_request_pub, req)
+                self.get_logger().info(f'/align_request 발행: {req}')
+            else:
+                self.get_logger().warn(
+                    f'{head} 수신했지만 현재 상태가 VISION 아님: {self.state}'
+                )
+            return
+
+        # 정상 거리+중앙: box_pose 대기
         if head == 'ok':
             self.waiting_align_step = False
             self.get_logger().info(
-                '거리 ok → /box_pose 대기, 늦은 align step_done은 무시'
+                '거리/중심 ok → /box_pose 대기, 늦은 align step_done은 무시'
             )
             return
-    
+
         self.get_logger().warn(f'알 수 없는 distance_status: {status}')
 
     def _box_pose_callback(self, msg):
@@ -395,7 +385,6 @@ class BrainNode(Node):
             )
             return
 
-        # 정상 좌표를 받았으므로 align retry는 성공적으로 종료
         self.align_retry_count = 0
         self.waiting_align_step = False
 
@@ -409,22 +398,22 @@ class BrainNode(Node):
         if self.emergency_active:
             self.get_logger().warn('/place_pose 수신했지만 비상정지 상태라 무시')
             return
-    
+
         self.get_logger().info(f'/place_pose 수신: {list(msg.data)}')
         self.get_logger().info(
             f'[KPI BRAIN] event=place_pose state={self.state} '
             f'coords={list(msg.data)}'
         )
-    
+
         if self.state != 'PLACE_VISION':
             self.get_logger().warn(
                 f'현재 상태가 PLACE_VISION이 아니므로 /place_pose 무시. 현재 상태: {self.state}'
             )
             return
-    
+
         self.state = 'PLACING'
         self._pub_state()
-    
+
         self._place_command_pub.publish(msg)
         self.get_logger().info('/place_command 발행: QR 기반 place_pose')
 
@@ -449,7 +438,6 @@ class BrainNode(Node):
                 )
                 return
 
-            # 픽 성공했으므로 재관측 retry 카운터 초기화
             self.pick_retry_count = 0
 
             self.state = 'NAV_TO_DEST'
@@ -471,11 +459,8 @@ class BrainNode(Node):
             self._finish_current_order()
 
         elif status == 'realign_fail':
-            self.get_logger().warn('pick_node realign_fail 수신 - AGV 차체 보정 후 재관측 대기')
+            self.get_logger().warn('pick_node realign_fail 수신 - 정면 재확인 후 재관측 대기')
 
-            # realign_fail은 vision/J1 보정으로 해결 안 되니 AGV 재정차 루프로 넘김
-            # 단, 실제 AGV 이동은 /marker_agv_pose -> agv_align_node -> /agv_align 에서 이미 수행됨
-            # 여기서는 align_status step_done을 기다리기 위해 VISION 상태를 유지한다.
             if self.state not in ('VISION', 'OBSERVING'):
                 self.get_logger().warn(
                     f'realign_fail 수신했지만 현재 상태가 VISION/OBSERVING 아님: {self.state}'
@@ -503,7 +488,6 @@ class BrainNode(Node):
                     f'pick 재관측 재시도 {self.pick_retry_count}/{self.PICK_REOBSERVE_MAX}'
                 )
 
-                # 다시 관측 자세부터 시작
                 self.state = 'OBSERVING'
                 self.waiting_align_step = False
                 self._pub_state()
@@ -514,7 +498,6 @@ class BrainNode(Node):
                 )
                 return
 
-            # 재시도 초과
             self.get_logger().error('pick 재관측 재시도 초과 - 픽 실패 처리')
             self.pick_retry_count = 0
             self.waiting_align_step = False
@@ -551,7 +534,6 @@ class BrainNode(Node):
                 )
                 return
 
-            # ===== [변경] eye-in-hand: 바로 vision 켜지 않고 관측 자세부터 이동 =====
             self.state = 'OBSERVING'
             self.waiting_align_step = False
             self._pub_state()
@@ -560,7 +542,6 @@ class BrainNode(Node):
             self.get_logger().info(
                 f'/observe_move 발행: level={self.level} (관측 자세 이동 요청)'
             )
-          
 
         elif msg.data == 'arrived':
             if self.state != 'NAV_TO_DEST':
@@ -568,19 +549,16 @@ class BrainNode(Node):
                     f'arrived 수신했지만 현재 상태가 NAV_TO_DEST가 아님: {self.state}'
                 )
                 return
-        
+
             zone = self.zone if self.zone else 'A'
-        
-            # 목적지 도착 후 바로 placing 하지 않고,
-            # QR 관측 자세로 먼저 이동
+
             self.state = 'QR_OBSERVING'
             self._pub_state()
-        
+
             self._publish_string(self._observe_move_pub, f'qr:{zone}')
             self.get_logger().info(
                 f'/observe_move 발행: qr:{zone} (QR 플레이싱 관측 자세 이동 요청)'
             )
-          
 
         elif msg.data == 'parked':
             if self.state != 'GO_PARKING':
@@ -590,8 +568,7 @@ class BrainNode(Node):
                 return
 
             self.get_logger().info('주차 완료 -> IDLE 복귀')
-          
-            # ===== [KPI TIME] 주문 시작부터 parked 후 IDLE 복귀까지 총 시간 =====
+
             if self.order_start_time is not None:
                 elapsed = time.time() - self.order_start_time
                 self.get_logger().info(
@@ -603,7 +580,7 @@ class BrainNode(Node):
                 self.order_start_order = None
             else:
                 self.get_logger().warn("[KPI TIME] parked 수신했지만 order_start_time 없음")
-              
+
             self.get_logger().info('[KPI BRAIN] event=parked result=go_idle')
 
             self.state = 'IDLE'
@@ -623,14 +600,12 @@ class BrainNode(Node):
         else:
             self.get_logger().warn(f'알 수 없는 nav_status: {msg.data}')
 
-    # ===== [신규] pick_node가 관측 자세에 도착했을 때 =====
+    # ===== pick_node가 관측 자세에 도착했을 때 =====
     def _observe_ready_callback(self, msg):
         if self.emergency_active:
             self.get_logger().warn('/observe_ready 수신했지만 비상정지 상태라 무시')
             return
 
-        # OBSERVING(최초 관측 / AGV align 후 재관측 / pick_failed 후 재관측)
-        # 또는 VISION(J1 보정 재관측) 둘 다 처리
         if self.state not in ('OBSERVING', 'VISION', 'QR_OBSERVING'):
             self.get_logger().warn(
                 f'/observe_ready 수신했지만 상태가 OBSERVING/VISION/QR_OBSERVING 아님: {self.state}'
@@ -642,26 +617,74 @@ class BrainNode(Node):
             f'[KPI BRAIN] event=observe_ready state={self.state} '
             f'data={msg.data} level={self.level}'
         )
-      
+
         # QR 플레이싱 관측 완료인 경우
         if self.state == 'QR_OBSERVING':
             self.state = 'PLACE_VISION'
             self._pub_state()
-        
+
             self._publish_string(self._vision_activate_pub, 'qr_place')
             self.get_logger().info('/vision_activate 발행: qr_place')
             return
 
-        # 최초 관측이면 VISION으로 전이, 이미 VISION이면(J1 보정 재관측) 유지
+        # ===== [신규] 최초 관측(OBSERVING)이면 곧바로 블록 검출로 가지 않고
+        # 먼저 FRONTAL_ALIGN(마커 정면정렬)부터 수행 =====
         if self.state == 'OBSERVING':
-            self.state = 'VISION'
+            self.state = 'FRONTAL_ALIGN'
+            self.frontal_align_entered_time = time.time()
             self._pub_state()
 
+            self._publish_string(self._vision_activate_pub, f'marker_align:{self.level}')
+            self.get_logger().info(
+                f'/vision_activate 발행: marker_align:{self.level} (정면정렬 시작)'
+            )
+            return
+
+        # state == 'VISION' (J1 픽셀 기반 재관측 - 기존 그대로 유지, 정면정렬 건너뜀)
         activate_data = f'{self.item}:{self.level}'
         self._publish_string(self._vision_activate_pub, activate_data)
         self.get_logger().info(f'/vision_activate 발행: {activate_data}')
 
-    # ===== [신규] AGV 차체 보정 1스텝 완료 후 다시 관측 =====
+    # ===== [신규] FRONTAL_ALIGN 무한대기 방지 타임아웃 =====
+    def _check_frontal_align_timeout(self):
+        """
+        마커가 계속 하나도 안 보이면 agv_align_node가 'aligned'를 영영 안 보내서
+        FRONTAL_ALIGN에 멈춰버릴 수 있음.
+
+        [판단] 이 시스템의 관측 거리(GRASP_DEPTH_RANGE 기준 약 20~45cm)는
+        짧아서 "너무 멀어서 마커가 안 보이는" 상황은 거의 없다고 보고,
+        마커가 계속 안 보이면 실제로는 AGV가 심하게 틀어졌거나(yaw) 좌우로
+        너무 벗어난 상황으로 판단한다. 어느 쪽인지 정보가 없는 채로 회전이나
+        전진을 억지로 시도하면 랙에 더 가까워지거나 더 벗어날 위험이 있어서,
+        여기서는 블록 검출을 강행하지 않고 ERROR로 멈춰서 사람이 개입하게 한다.
+        """
+        if self.emergency_active:
+            return
+        if self.state != 'FRONTAL_ALIGN' or self.frontal_align_entered_time is None:
+            return
+
+        elapsed = time.time() - self.frontal_align_entered_time
+        if elapsed < self.FRONTAL_ALIGN_TIMEOUT_SEC:
+            return
+
+        self.get_logger().error(
+            f'[정면정렬] {elapsed:.1f}s 동안 마커가 전혀 안 보임 '
+            f'(AGV가 심하게 틀어졌거나 벗어난 것으로 추정) → 자동 복구 불가, ERROR'
+        )
+        self.get_logger().info(
+            f'[KPI BRAIN] event=frontal_align_timeout elapsed={elapsed:.1f} '
+            f'level={self.level} result=error'
+        )
+
+        self.frontal_align_entered_time = None
+        self.waiting_align_step = False
+        self.state = 'ERROR'
+        self._pub_state()
+
+        # vision을 정지시켜서 marker_align 모드로 계속 프레임 처리하지 않게 함
+        self._publish_string(self._vision_activate_pub, 'stop')
+
+    # ===== AGV 정렬 관련 신호 처리 (정면정렬 완료 / 펄스 1스텝 완료) =====
     def _align_status_callback(self, msg):
         if self.emergency_active:
             self.get_logger().warn(
@@ -678,8 +701,21 @@ class BrainNode(Node):
         )
 
         if status == 'aligned':
-            # aligned는 align_node가 "오차 허용범위 안"이라고 판단했다는 뜻.
-            # 기존 brain 구조에서는 다시 관측 자세에서 블록 검출을 한 번 더 수행한다.
+            # ===== [신규] FRONTAL_ALIGN 단계 완료 → 곧바로 블록 검출 시작 =====
+            if self.state == 'FRONTAL_ALIGN':
+                self.get_logger().info('정면정렬 완료(aligned) → 블록 검출 시작')
+                self.frontal_align_entered_time = None
+                self.state = 'VISION'
+                self._pub_state()
+
+                activate_data = f'{self.item}:{self.level}'
+                self._publish_string(self._vision_activate_pub, activate_data)
+                self.get_logger().info(f'/vision_activate 발행: {activate_data}')
+                return
+
+            # ===== [기존 유지] VISION 상태에서의 aligned (주로 depth_fail 경로) =====
+            # STAGE2/3(TARGET 기반 정밀보정)는 더 이상 없지만, 이 신호를
+            # "정면 쪽에서는 더 손댈 게 없다"는 뜻으로 보고 재관측을 유도한다.
             self.waiting_align_step = False
             self.align_retry_count = 0
 
@@ -689,14 +725,14 @@ class BrainNode(Node):
                 )
                 return
 
-            self.get_logger().info('AGV 차체 보정 완료 aligned → 재관측 후 블록 검출')
+            self.get_logger().info('정면 재확인 완료(aligned) → 재관측(정면정렬부터) 후 블록 검출')
 
             self.state = 'OBSERVING'
             self._pub_state()
 
             self._publish_string(self._observe_move_pub, str(self.level))
             self.get_logger().info(
-                f'/observe_move 재발행: level={self.level} (AGV align 완료 후 재관측)'
+                f'/observe_move 재발행: level={self.level} (align aligned 후 재관측)'
             )
             return
 
@@ -704,66 +740,60 @@ class BrainNode(Node):
             self.get_logger().warn(f'알 수 없는 align_status: {status}')
             return
 
-        # ===== [핵심 수정] 실제로 AGV 보정을 기다리는 중일 때만 step_done 처리 =====
+        # ===== [신규] FRONTAL_ALIGN 단계의 step_done은 별도 처리 불필요 =====
+        # 팔은 안 움직였으므로 재관측 없이, vision이 다음 프레임에서
+        # marker_agv_pose를 다시 보내 agv_align_node가 알아서 재평가한다.
+        if self.state == 'FRONTAL_ALIGN':
+            return
+
         if not self.waiting_align_step:
             self.get_logger().warn(
                 'align step_done 수신했지만 waiting_align_step=False '
                 '→ 늦은/불필요한 step_done으로 보고 무시'
             )
             return
-          
+
         # ===== [QR PLACE] QR 거리 보정 step_done 처리 =====
         if self.state == 'PLACE_VISION':
             self.waiting_align_step = False
             self.align_retry_count += 1
-        
+
             zone = self.zone if self.zone else 'A'
-        
+
             self.get_logger().warn(
                 f'QR 전진 보정 완료 step_done → QR 재관측 {self.align_retry_count}회'
             )
-        
+
             self.state = 'QR_OBSERVING'
             self._pub_state()
-        
+
             self._publish_string(self._observe_move_pub, f'qr:{zone}')
             self.get_logger().info(
                 f'/observe_move 재발행: qr:{zone} (QR 전진 보정 후 재관측)'
             )
             return
-          
-        # 차체 보정은 vision 단계에서만 의미 있음
+
+        # ===== [블록 기반 x/y 보정] too_far/side_left/side_right 등 step_done =====
         if self.state != 'VISION':
             self.get_logger().warn(
                 f'align step_done 수신했지만 현재 상태가 VISION이 아님: {self.state}'
             )
             return
 
-        # 이번 step_done은 처리했으므로 플래그 해제
         self.waiting_align_step = False
-
-        # if self.align_retry_count >= self.ALIGN_RETRY_MAX:
-        #     self.get_logger().error('AGV 차체 보정 반복 초과 → ERROR')
-        #     self.state = 'ERROR'
-        #     self._pub_state()
-        #     return
-
-        # 무제한 재관측 모드:
-        # GRASP_DEPTH_RANGE 안에 들어올 때까지 too_far → align → 재관측 반복
-        # 단, too_close는 distance_status 콜백에서 ERROR 처리해야 함
         self.align_retry_count += 1
 
         self.get_logger().warn(
-            f'AGV 차체 보정 후 재관측 {self.align_retry_count}회 - 무제한 모드'
+            f'AGV 보정(block_forward/left/right) 완료 후 재관측(정면정렬부터) '
+            f'{self.align_retry_count}회'
         )
 
-        # 다시 관측 자세부터 시작
         self.state = 'OBSERVING'
         self._pub_state()
 
         self._publish_string(self._observe_move_pub, str(self.level))
         self.get_logger().info(
-            f'/observe_move 재발행: level={self.level} (AGV align 후 재관측)'
+            f'/observe_move 재발행: level={self.level} (AGV 보정 후 재관측)'
         )
         return
 
@@ -789,6 +819,7 @@ class BrainNode(Node):
         self.emergency_active = True
         self.state = 'EMERGENCY_STOP'
         self.waiting_align_step = False
+        self.frontal_align_entered_time = None
         self._pub_state()
 
         self._publish_string(self._vision_activate_pub, 'stop')
