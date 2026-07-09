@@ -125,6 +125,9 @@ GRIP_POSE = {
 
 # 물체 바로 위 waypoint 높이
 APPROACH_Z_MM = 30.0
+# place는 차체보다 낮은 곳에 내려놓을 수 있으므로
+# 최종 z는 낮더라도 접근 시작점은 충분히 높게 잡는다.
+PLACE_APPROACH_Z_MM = 90.0
 
 # =========================
 # [변경] 실제 피킹 미세 보정값 — 전부 0으로 초기화
@@ -136,7 +139,7 @@ APPROACH_Z_MM = 30.0
 PICK_X_BIAS_MM = 5.0     # 이전: 12.0
 PICK_Y_BIAS_MM = -9.9     # 이전: -26.0
 PICK_Z_BIAS_MM = 0.0     # 이전: -10.0
-GRIPPER_Z_OFFSET_MM = 0.0   # place 시 z 보정 (eye-in-hand 재측정, 실측 조정)
+GRIPPER_Z_OFFSET_MM = 0.0   #  시 z 보정 (eye-in-hand 재측정, 실측 조정)
 
 # y 절대보정 (고정량, mm) - 실측해서 조정. y를 0쪽으로 당기는 양.
 Y_COMP_1F_POS = -8.5   # 1층 y>0(왼쪽)일 때 뺄 양
@@ -895,9 +898,9 @@ class PickNode(Node):
             # place도 그리퍼 끝 기준 -> 플랜지 기준 z 보정
             target_z = z + GRIPPER_Z_OFFSET_MM
 
-            pre_place = [x, y, target_z + APPROACH_Z_MM, rx, ry, rz]
-            target    = [x, y, target_z,                 rx, ry, rz]
-            lifted    = [x, y, target_z + LIFT_Z,        rx, ry, rz]
+            pre_place = [x, y, target_z + PLACE_APPROACH_Z_MM, rx, ry, rz]
+            target    = [x, y, target_z,                         rx, ry, rz]
+            lifted    = [x, y, target_z + PLACE_APPROACH_Z_MM, rx, ry, rz]
 
             self._log(
                 f"[PLACE INFO] 원본 coords={coords}, target_z={round(target_z,2)}, "
