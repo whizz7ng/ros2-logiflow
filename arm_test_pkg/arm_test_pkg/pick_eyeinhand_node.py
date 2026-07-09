@@ -225,31 +225,73 @@ class PickNode(Node):
         self.get_logger().info(f"/pick_status 발행: {status}")
 
     def _check_gripped(self):
-        """그리퍼가 블록을 물었는지 확인.
-        빈손 완전 닫힘 ≈ 9, 블록 물면 두께만큼 덜 닫혀 값이 큼.
-        GRIP_SUCCESS_THRESH 이상이면 물린 것."""
-        val = None
-        for _ in range(5):   # None 방지: 여러 번 읽어 값 확보
-            try:
-                v = self.mc.get_gripper_value()
-            except Exception as e:
-                self.get_logger().warn(f"get_gripper_value 예외: {e}")
-                v = None
-            if v is not None:
-                val = v
-                break
-            time.sleep(0.2)
-        if val is None:
-            # 값을 못 읽으면 안전하게 '실패'로 봐서 재시도 유도
-            self.get_logger().warn("gripper_value 계속 None - 파지 실패로 간주")
-            return False
-        gripped = val >= GRIP_SUCCESS_THRESH
-        self.get_logger().info(
-            f"[GRIP CHECK] gripper_value={val} (기준 {GRIP_SUCCESS_THRESH}) "
-            f"→ {'물림' if gripped else '빈손'}"
-        )
-        return gripped
+        """그리퍼 파지 판정.
+        반환값:
+          True  = 물림 확정
+          False = 빈손 확정
+          None  = 피드백 불가
+    
+        동작:
+          - 값이 나오면 GRIP_SUCCESS_THRESH 기준으로 판단
+          - None이면 그리퍼 닫기 명령을 재전송하고 다시 읽음
+          - 끝까지 None이면 실패로 단정하지 않고 None 반환
+        """
+    
+        CLOSE_RETRY_MAX = 3        # None일 때 닫기 명령 재시도 횟수
+        READ_TRIES = 5             # 각 시도마다 value 읽는 횟수
+        READ_INTERVAL = 0.2
+    
+        for close_try in range(CLOSE_RETRY_MAX + 1):
+            val = None
+    
+            # 첫 번째 close_try=0은 이미 닫기 명령을 보낸 직후라 읽기만 함.
+            # close_try>=1부터는 닫기 명령을 다시 보냄.
+            if close_try > 0:
+                self.get_logger().warn(
+                    f"[GRIP CHECK] gripper_value=None → 닫기 명령 재시도 {close_try}/{CLOSE_RETRY_MAX}"
+                )
+                self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
+                if not self._safe_sleep(1.0):
+                    return None
+    
+            for read_try in range(READ_TRIES):
+                try:
+                    v = self.mc.get_gripper_value()
+                except Exception as e:
+                    self.get_logger().warn(
+                        f"[GRIP CHECK] close_try={close_try} read_try={read_try+1} 예외: {e}"
+                    )
+                    v = None
+    
+                self.get_logger().info(
+                    f"[GRIP CHECK] close_try={close_try} read_try={read_try+1} raw_value={v}"
+                )
+    
+                if v is not None:
+                    val = v
+                    break
+    
+                time.sleep(READ_INTERVAL)
+    
+            if val is None:
+                continue
+    
+            gripped = val >= GRIP_SUCCESS_THRESH
+    
+            self.get_logger().info(
+                f"[GRIP CHECK] gripper_value={val}, "
+                f"close_cmd={GRIPPER_CLOSE}, success_thresh={GRIP_SUCCESS_THRESH} "
+                f"→ {'물림' if gripped else '빈손'}"
+            )
+    
+            return gripped
 
+        self.get_logger().warn(
+            "[GRIP CHECK] 닫기 재시도 후에도 gripper_value=None "
+            "→ 피드백 불가, 실패로 단정하지 않음"
+        )
+        return None
+  
     def _parse_coords(self, msg: Float32MultiArray):
         coords = [round(float(v), 2) for v in msg.data]
         if len(coords) != 6:
