@@ -324,7 +324,7 @@ class PickNode(Node):
             
                     if mode == 0:
                         # angles 모드: 6개 전부 관절각(deg)
-                        angle_tol = 3.0
+                        angle_tol = 6.0
             
                         if all(d <= angle_tol for d in diffs):
                             if not self._safe_sleep(settle):
