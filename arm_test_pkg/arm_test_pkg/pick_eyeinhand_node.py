@@ -333,7 +333,7 @@ class PickNode(Node):
             
                     else:
                         # coords 모드: xyz는 mm, rpy는 deg
-                        xyz_tol = 8.0
+                        xyz_tol = 15.0
                         rpy_tol = 5.0
             
                         if all(d <= xyz_tol for d in diffs[:3]) and all(d <= rpy_tol for d in diffs[3:]):
