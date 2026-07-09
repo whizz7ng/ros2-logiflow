@@ -827,21 +827,66 @@ class VisionNode(Node):
             self.get_logger().warn('depth/intrinsic 준비 안 됨')
             return
 
+        # 1) pyzbar 먼저 시도
         decoded = pyzbar.decode(self.color_img)
-        if not decoded:
+        
+        qr_found = False
+        zone = '?'
+        cx = cy = None
+        
+        if decoded:
+            # 여러 QR이 보일 수 있으므로 A/B/C 유효 QR 우선 선택
+            candidates = []
+        
+            H, W = self.color_img.shape[:2]
+        
+            for obj in decoded:
+                try:
+                    data = obj.data.decode('utf-8').strip().upper()
+                except Exception:
+                    continue
+        
+                pts = obj.polygon
+                if not pts:
+                    continue
+        
+                qx = sum(p.x for p in pts) / len(pts)
+                qy = sum(p.y for p in pts) / len(pts)
+        
+                # A/B/C면 우선순위 높게, 그중 화면 중앙에 가까운 QR 선택
+                valid_rank = 0 if data in VALID_ZONES else 1
+                dist_center = (qx - W / 2) ** 2 + (qy - H / 2) ** 2
+        
+                candidates.append((valid_rank, dist_center, data, qx, qy))
+        
+            if candidates:
+                candidates.sort(key=lambda x: (x[0], x[1]))
+                _, _, zone, qx, qy = candidates[0]
+                cx = int(qx)
+                cy = int(qy)
+                qr_found = True
+                self.get_logger().info(f'QR pyzbar 인식: zone={zone} cx={cx} cy={cy}')
+        
+        # 2) pyzbar 실패 시 OpenCV QRCodeDetector fallback
+        if not qr_found:
+            gray = cv2.cvtColor(self.color_img, cv2.COLOR_BGR2GRAY)
+        
+            qr_detector = cv2.QRCodeDetector()
+            data, points, _ = qr_detector.detectAndDecode(gray)
+        
+            if data and points is not None:
+                zone = data.strip().upper()
+        
+                pts = points.reshape(-1, 2)
+                cx = int(np.mean(pts[:, 0]))
+                cy = int(np.mean(pts[:, 1]))
+        
+                qr_found = True
+                self.get_logger().info(f'QR OpenCV 인식: zone={zone} cx={cx} cy={cy}')
+        
+        if not qr_found:
             self.get_logger().warn('QR 못 찾음, 재시도')
             return
-
-        obj = decoded[0]
-        try:
-            zone = obj.data.decode('utf-8').strip().upper()
-        except Exception:
-            zone = '?'
-
-        pts = obj.polygon
-        cx = int(sum(p.x for p in pts) / len(pts))
-        cy = int(sum(p.y for p in pts) / len(pts))
-
         dist_m = self._get_robust_depth(cx, cy)
         if dist_m <= 0:
             self.get_logger().warn('QR depth 측정 실패(0) - 재시도')
