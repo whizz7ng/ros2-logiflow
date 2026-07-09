@@ -778,6 +778,48 @@ class VisionNode(Node):
         )
         return depth_mm / 1000.0
 
+    def _get_qr_place_depth(self, cx, cy):
+        """
+        QR place 전용 depth 측정.
+        QR 종이는 반사/검정무늬/상단 위치 때문에 중심 depth가 0으로 비는 경우가 많아서
+        patch 크기를 단계적으로 키워서 유효 depth를 찾는다.
+    
+        블록 피킹용 _get_robust_depth()에는 영향 주지 않는다.
+        """
+        if self.depth_img is None:
+            return 0.0
+    
+        H, W = self.depth_img.shape[:2]
+    
+        for kk in [12, 16, 20, 25, 30]:
+            y0, y1 = max(0, cy - kk), min(H, cy + kk + 1)
+            x0, x1 = max(0, cx - kk), min(W, cx + kk + 1)
+    
+            patch = self.depth_img[y0:y1, x0:x1]
+    
+            # QR place 기준 거리. 필요하면 상한 600까지 늘려도 됨.
+            valid = patch[(patch > 160) & (patch < 600)]
+    
+            self.get_logger().info(
+                f"[QR DEPTH TRY] patch k={kk}, valid={valid.size}"
+            )
+    
+            if valid.size < 30:
+                continue
+    
+            depth_mm = float(np.percentile(valid, 30))
+    
+            self.get_logger().info(
+                f"[QR DEPTH SELECT] patch k={kk}, valid={valid.size}, p30={depth_mm:.0f}mm"
+            )
+    
+            return depth_mm / 1000.0
+    
+        self.get_logger().warn(
+            f"[QR DEPTH FAIL] cx={cx}, cy={cy}, 모든 patch에서 valid depth 부족"
+        )
+        return 0.0
+
     def _draw_and_publish(self, img, x1, y1, x2, y2, label, cut=False):
         color = (0, 0, 255) if cut else CLASS_COLORS.get(label, (0, 255, 0))
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
