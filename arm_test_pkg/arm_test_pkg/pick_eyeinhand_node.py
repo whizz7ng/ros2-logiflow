@@ -133,7 +133,7 @@ WAIT_COORDS_TIMEOUT = 8.0
 # 도달 확인 후 진동/떨림 안정화 대기(초)
 # - 일반 이동: 0.5초
 # - 관측 자세(동적 T용 get_coords 정확도가 중요한 곳)는 더 길게(0.8초) 사용
-SETTLE_AFTER_ARRIVE = 0.8
+SETTLE_AFTER_ARRIVE = 0.5
 SETTLE_AFTER_ARRIVE_OBSERVE = 0.8
 # 도달 확인 폴링 주기(초)
 WAIT_POLL_INTERVAL = 0.1
@@ -141,6 +141,9 @@ WAIT_POLL_INTERVAL = 0.1
 # 바로 diff 폴백으로 넘어가지 않고 재시도해볼 횟수/간격
 IS_IN_POSITION_RETRY_MAX = 5
 IS_IN_POSITION_RETRY_INTERVAL = 0.15
+# diff 폴백에서 매번 몇 번 읽어 중앙값을 쓸지 (노이즈/떨림 필터링)
+FALLBACK_READ_TRIES = 3
+FALLBACK_READ_INTERVAL = 0.05
 # 그리퍼 동작 완료 대기 타임아웃(초, 기존 sleep 시간과 동일하게 상황별로 넘김)
 GRIPPER_TIMEOUT_DEFAULT = 2.5
 
@@ -242,8 +245,9 @@ class PickNode(Node):
              넘어가지 않고 IS_IN_POSITION_RETRY_MAX회까지 다시 호출해서
              재확인한다 (통신 순간 오류/일시 응답 지연일 수 있으므로).
              그래도 계속 신뢰불가면 그때 diff 폴백으로 전환.
-        2) 폴백: get_angles()/get_coords()로 현재값을 읽어 target과의
-           오차가 허용 범위(tol) 이내인지 직접 비교.
+        2) 폴백: get_angles()/get_coords()를 FALLBACK_READ_TRIES회 연속 읽어
+           중앙값을 구한 뒤(순간 노이즈/떨림 필터링, _safe_get_pose와 동일 방식),
+           target과의 오차가 허용 범위(tol) 이내인지 비교.
 
         도달 확인 후 settle초만큼 한 번 더 대기해서 진동/떨림을 가라앉힌다
         (특히 get_coords로 관측 자세를 읽어야 하는 경우 필수).
@@ -291,8 +295,10 @@ class PickNode(Node):
                 bad_read_count = 0
 
             if use_fallback:
-                cur = self.mc.get_angles() if mode == 0 else self.mc.get_coords()
-                if cur and cur != -1 and len(cur) == 6:
+                cur = self._safe_get_pose(mode, tries=FALLBACK_READ_TRIES, interval=FALLBACK_READ_INTERVAL)
+                if self.emergency_active:
+                    return False
+                if cur is not None:
                     tol_pos = 2.0 if mode == 0 else 3.0   # deg 또는 mm
                     tol_rot = 2.0 if mode == 0 else 5.0
                     diffs = [abs(c - t) for c, t in zip(cur, target)]
@@ -424,19 +430,27 @@ class PickNode(Node):
         with self._busy_lock:
             self._busy = False
 
-    def _safe_get_coords(self, tries=5):
-        """정지 상태에서 여러 번 읽어 중앙값. 이상값/실패 걸러냄."""
+    def _safe_get_pose(self, mode, tries=3, interval=0.05):
+        """
+        정지 상태에서 여러 번 읽어 중앙값을 반환. 이상값(None/-1/길이 불일치)은 버림.
+          mode: 0 = get_angles(), 1 = get_coords()
+        표본이 하나도 유효하지 않으면 None 반환.
+        """
         samples = []
         for _ in range(tries):
-            c = self.mc.get_coords()
+            c = self.mc.get_angles() if mode == 0 else self.mc.get_coords()
             if c and c != -1 and len(c) == 6:
                 samples.append(c)
-            time.sleep(0.15)
+            time.sleep(interval)
         if not samples:
             return None
         arr = np.array(samples)
         med = np.median(arr, axis=0)
         return [float(v) for v in med]
+
+    def _safe_get_coords(self, tries=5):
+        """정지 상태에서 여러 번 읽어 중앙값. 이상값/실패 걸러냄. (get_coords 전용 래퍼)"""
+        return self._safe_get_pose(mode=1, tries=tries, interval=0.15)
 
     def _stop_robot_arm(self):
         try:
