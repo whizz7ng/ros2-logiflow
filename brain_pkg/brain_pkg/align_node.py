@@ -65,10 +65,9 @@ GAIN_YAW = 0.004
 # bridge에서 max_vx=0.030, max_vy=0.030, max_wz=0.150으로 잘림
 ALIGN_VX = 0.03
 ALIGN_VY = 0.06
-
 # safety_filter의 INPLACE_SMALL_TURN 감지 범위가 0.010~0.080이므로
 # yaw는 일부러 작게 오래 보냄
-ALIGN_WZ = 0.15
+ALIGN_WZ = 0.41
 
 # 부호가 반대로 움직이면 여기만 -1.0으로 바꾸면 됨
 SIGN_X = 1.0
