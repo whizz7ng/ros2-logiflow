@@ -697,6 +697,10 @@ class VisionNode(Node):
             )
             self._pub_dist_status('too_close', dist_mm)
             self._publish_marker_agv()
+            
+            # AGV 후진 보정이 들어가면 기존 observe_pose는 더 이상 신뢰하지 않음
+            self.have_fresh_observe_pose = False
+            
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             self.mode = MODE_IDLE
             return
@@ -707,21 +711,19 @@ class VisionNode(Node):
             )
             self._pub_dist_status('too_far', dist_mm)
             self._publish_marker_agv()
+            
+            # AGV 전진 보정이 들어가면 기존 observe_pose는 더 이상 신뢰하지 않음
+            self.have_fresh_observe_pose = False
+            
             self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
             self.mode = MODE_IDLE
             return
 
         else:
-            self.get_logger().info(
-                f'[거리] 파지 가능 범위 진입 {dist_mm:.0f}mm '
-                f'({glo}~{ghi}) → /box_pose 진행'
-            )
-            self._pub_dist_status('ok', dist_mm)
-
-            # ===== [신규] 블록 중심이 화면에서 너무 치우쳐 있으면 =====
-            # 거리는 정상이어도 pick 진행 대신 AGV 좌우(y) 보정을 요청한다.
-            # (기존 GRIP_OFFSET/보정값들은 화면 중앙 근처에서 잡을 때 실측된
-            #  값이라, 너무 사이드에서 잡으면 부정확해질 수 있음)
+            # ===== 블록 중심이 화면에서 너무 치우쳐 있으면 =====
+            # 거리만 ok여도 중심이 틀어졌으면 pick 진행 금지.
+            # 중요: side_left/right를 보내기 전에 ok를 보내면 brain이 오판할 수 있으므로
+            # ok는 중심까지 통과한 뒤에만 발행한다.
             if cx < BLOCK_CENTER_MIN_X or cx > BLOCK_CENTER_MAX_X:
                 side = 'left' if cx < BLOCK_CENTER_MIN_X else 'right'
                 self.get_logger().warn(
@@ -729,9 +731,20 @@ class VisionNode(Node):
                     f'밖({side}) → AGV 좌우보정 요청, pick 보류'
                 )
                 self._pub_dist_status(f'side_{side}', dist_mm)
+
+                # AGV 좌우 보정이 들어가면 기존 observe_pose는 더 이상 신뢰하지 않음
+                self.have_fresh_observe_pose = False
+                
                 self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=True)
                 self.mode = MODE_IDLE
                 return
+        
+            # 거리 + 중심 모두 통과했을 때만 ok 발행
+            self.get_logger().info(
+                f'[거리/중심] 파지 조건 통과 dist={dist_mm:.0f}mm, cx={cx} '
+                f'→ /box_pose 진행'
+            )
+            self._pub_dist_status('ok', dist_mm)
 
         fx, fy, ppx, ppy = self.intrinsics
         X = (cx - ppx) / fx * dist_m
@@ -758,6 +771,8 @@ class VisionNode(Node):
         msg.data = [float(v) for v in coords]
         self._box_pose_pub.publish(msg)
         self.get_logger().info(f'/box_pose 발행: {[round(v, 1) for v in coords]}')
+
+        self.have_fresh_observe_pose = False
 
         self._draw_and_publish(img, x1, y1, x2, y2, self.target_item, cut=False)
         try:
