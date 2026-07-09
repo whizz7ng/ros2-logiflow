@@ -649,6 +649,12 @@ class VisionNode(Node):
                     self.get_logger().warn('depth 실패했지만 ArUco 마커도 안 보임 → realign_fail')
                     self._emit_realign_fail()
                 else:
+                    # 중요:
+                    # Brain이 align_node의 step_done을 유효하게 처리하려면
+                    # 먼저 /distance_status로 "AGV 보정 대기 상태"임을 알려줘야 함.
+                    self._pub_dist_status('depth_fail', 0)
+                    self.get_logger().warn('/distance_status 발행: depth_fail:0')
+
                     self._publish_marker_agv()
 
                 # brain/nav가 보정하도록, 현재 vision은 멈춤
