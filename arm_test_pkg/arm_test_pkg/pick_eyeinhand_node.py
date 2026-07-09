@@ -970,6 +970,10 @@ class PickNode(Node):
 
             x, y, z, rx, ry, rz = coords
 
+            # 플레이스 때 손목 꼬임 방지용 자세로 강제 변경
+            rx, ry, rz = -145.47, -28.92, -53.1
+
+
             target_z = z + GRIPPER_Z_OFFSET_MM
 
             pre_place = [x, y, target_z + PLACE_APPROACH_Z_MM, rx, ry, rz]
@@ -981,6 +985,13 @@ class PickNode(Node):
                 f"pre_place={[round(v,1) for v in pre_place]}"
             )
 
+            self._log("[PLACE 0/6] 홈 경유 후 플레이스 접근")
+            self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+            if not self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
+                self._log("[PLACE] 홈 경유 실패 - 중단")
+                self._pub_pick_status("error")
+                return
+            
             self._log("[PLACE 1/6] 놓을 위치 위 waypoint 이동")
             self.mc.send_coords(pre_place, MOVE_SPEED, 1)
             if not self._wait_in_position(pre_place, mode=1, timeout=WAIT_COORDS_TIMEOUT):
