@@ -948,7 +948,7 @@ class PickNode(Node):
             )
 
             self._log("[PLACE 1/6] 놓을 위치 위 waypoint 이동")
-            self.mc.send_coords(pre_place, MOVE_SPEED, 0)
+            self.mc.send_coords(pre_place, MOVE_SPEED, 1)
             if not self._wait_in_position(pre_place, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                 self._log("[PLACE] waypoint 도달 실패 - 중단")
                 self._pub_pick_status("error")
