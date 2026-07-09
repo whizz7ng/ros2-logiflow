@@ -291,16 +291,18 @@ class BrainNode(Node):
 
         # depth 실패
         if head == 'depth_fail':
-            if self.state == 'VISION':
-                self.waiting_align_step = True
-                self.get_logger().warn(
-                    'depth_fail 수신 → ArUco 기반 정면 재확인 후 step_done/aligned 대기'
-                )
-            else:
-                self.get_logger().warn(
-                    f'depth_fail 수신했지만 현재 상태가 VISION 아님: {self.state}'
-                )
-            return
+          if self.state == 'VISION':
+              self.waiting_align_step = True
+              self.get_logger().warn(
+                  f'depth_fail 수신({status}) → depth 미확보, 우선 AGV 전진 보정(block_forward) 요청'
+              )
+              self._publish_string(self._align_request_pub, 'block_forward')
+              self.get_logger().info('/align_request 발행: block_forward (depth_fail)')
+          else:
+              self.get_logger().warn(
+                  f'depth_fail 수신했지만 현재 상태가 VISION 아님: {self.state}'
+              )
+          return
 
         # 너무 가까움: 후진 금지라 자동 보정 불가
         if head == 'too_close':
