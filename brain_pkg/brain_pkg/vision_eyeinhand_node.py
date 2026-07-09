@@ -66,7 +66,7 @@ MODE_QR_PLACE = 'qr_place'
 MODE_MARKER_ALIGN = 'marker_align'   # [신규] 블록 검출 전 마커 정면(yaw) 정렬 전용 모드
 
 # place 오프셋 (QR → 실제 놓을 위치, 실측 필요)
-PLACE_OFFSET_X = -125.0
+PLACE_OFFSET_X = -150.0
 PLACE_OFFSET_Y = 10.0
 PLACE_OFFSET_Z = -40.0
 PLACE_RX = -178.0
