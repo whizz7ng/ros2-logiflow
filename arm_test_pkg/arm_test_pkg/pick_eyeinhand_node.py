@@ -259,7 +259,10 @@ class PickNode(Node):
         # myCobot280 Pi에서 각도 이동(mode=0)은 is_in_position()이 -1을 자주 반환하므로
         # 처음부터 get_angles() 기반 diff 확인으로 진행한다.
         # 좌표 이동(mode=1)은 기존처럼 is_in_position()을 먼저 시도한다.
-        use_fallback = True if mode == 0 else False
+        #use_fallback = True if mode == 0 else False
+        # myCobot280 Pi에서는 is_in_position()이 angles/coords 모두 -1을 자주 반환하므로
+        # 항상 get_angles/get_coords 기반 diff 확인으로 진행한다.
+        use_fallback = True
         
         bad_read_count = 0
 
@@ -300,32 +303,43 @@ class PickNode(Node):
                 bad_read_count = 0
 
             if use_fallback:
-                cur = self._safe_get_pose(mode, tries=FALLBACK_READ_TRIES, interval=FALLBACK_READ_INTERVAL)
+                cur = self._safe_get_pose(
+                    mode,
+                    tries=FALLBACK_READ_TRIES,
+                    interval=FALLBACK_READ_INTERVAL
+                )
+            
                 if self.emergency_active:
                     return False
+            
                 if cur is not None:
-                    if mode == 0:
-                        # angles mode: 6개 모두 관절각(deg)
-                        tol_pos = 3.0
-                        tol_rot = 5.0
-                    else:
-                        # coords mode: 앞 3개는 mm, 뒤 3개는 deg
-                        tol_pos = 3.0
-                        tol_rot = 5.0
-                
                     diffs = [abs(c - t) for c, t in zip(cur, target)]
-                
+            
                     self.get_logger().info(
                         f"[WAIT DEBUG] mode={mode} "
                         f"cur={[round(v, 1) for v in cur]} "
                         f"target={[round(v, 1) for v in target]} "
                         f"diff={[round(v, 1) for v in diffs]}"
                     )
-                
-                    if all(d <= tol_pos for d in diffs[:3]) and all(d <= tol_rot for d in diffs[3:]):
-                        if not self._safe_sleep(settle):
-                            return False
-                        return True
+            
+                    if mode == 0:
+                        # angles 모드: 6개 전부 관절각(deg)
+                        angle_tol = 3.0
+            
+                        if all(d <= angle_tol for d in diffs):
+                            if not self._safe_sleep(settle):
+                                return False
+                            return True
+            
+                    else:
+                        # coords 모드: xyz는 mm, rpy는 deg
+                        xyz_tol = 8.0
+                        rpy_tol = 5.0
+            
+                        if all(d <= xyz_tol for d in diffs[:3]) and all(d <= rpy_tol for d in diffs[3:]):
+                            if not self._safe_sleep(settle):
+                                return False
+                            return True
                       
             time.sleep(poll)
 
