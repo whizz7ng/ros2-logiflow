@@ -929,7 +929,7 @@ class VisionNode(Node):
         if not qr_found:
             self.get_logger().warn('QR 못 찾음, 재시도')
             return
-        dist_m = self._get_robust_depth(cx, cy)
+        dist_m = self._get_qr_place_depth(cx, cy)
         if dist_m <= 0:
             self.get_logger().warn('QR depth 측정 실패(0) - 재시도')
             return
