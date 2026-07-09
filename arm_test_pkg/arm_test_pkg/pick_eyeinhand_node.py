@@ -133,8 +133,8 @@ WAIT_COORDS_TIMEOUT = 8.0
 # 도달 확인 후 진동/떨림 안정화 대기(초)
 # - 일반 이동: 0.5초
 # - 관측 자세(동적 T용 get_coords 정확도가 중요한 곳)는 더 길게(0.8초) 사용
-SETTLE_AFTER_ARRIVE = 0.8
-SETTLE_AFTER_ARRIVE_OBSERVE = 0.8
+SETTLE_AFTER_ARRIVE = 1.2
+SETTLE_AFTER_ARRIVE_OBSERVE = 2.0
 # 도달 확인 폴링 주기(초)
 WAIT_POLL_INTERVAL = 0.1
 # is_in_position()이 None/-1 등 신뢰불가 값을 반환했을 때,
