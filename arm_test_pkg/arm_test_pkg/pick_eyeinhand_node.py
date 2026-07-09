@@ -131,9 +131,16 @@ WAIT_ANGLES_TIMEOUT = 8.0
 # send_coords 이동 후 도달 확인 타임아웃(초).
 WAIT_COORDS_TIMEOUT = 8.0
 # 도달 확인 후 진동/떨림 안정화 대기(초)
-SETTLE_AFTER_ARRIVE = 0.15
+# - 일반 이동: 0.5초
+# - 관측 자세(동적 T용 get_coords 정확도가 중요한 곳)는 더 길게(0.8초) 사용
+SETTLE_AFTER_ARRIVE = 0.5
+SETTLE_AFTER_ARRIVE_OBSERVE = 0.8
 # 도달 확인 폴링 주기(초)
 WAIT_POLL_INTERVAL = 0.1
+# is_in_position()이 None/-1 등 신뢰불가 값을 반환했을 때,
+# 바로 diff 폴백으로 넘어가지 않고 재시도해볼 횟수/간격
+IS_IN_POSITION_RETRY_MAX = 5
+IS_IN_POSITION_RETRY_INTERVAL = 0.15
 # 그리퍼 동작 완료 대기 타임아웃(초, 기존 sleep 시간과 동일하게 상황별로 넘김)
 GRIPPER_TIMEOUT_DEFAULT = 2.5
 
@@ -231,7 +238,10 @@ class PickNode(Node):
 
         1) mc.is_in_position(target, mode) 를 우선 사용.
            - 반환값 1이면 도달로 간주.
-           - 0/1 외의 값(None, -1 등 신뢰불가)이 나오면 즉시 diff 폴백으로 전환.
+           - 0/1 외의 값(None, -1 등 신뢰불가)이 나오면 즉시 폴백으로
+             넘어가지 않고 IS_IN_POSITION_RETRY_MAX회까지 다시 호출해서
+             재확인한다 (통신 순간 오류/일시 응답 지연일 수 있으므로).
+             그래도 계속 신뢰불가면 그때 diff 폴백으로 전환.
         2) 폴백: get_angles()/get_coords()로 현재값을 읽어 target과의
            오차가 허용 범위(tol) 이내인지 직접 비교.
 
@@ -242,6 +252,7 @@ class PickNode(Node):
         """
         t0 = time.time()
         use_fallback = False
+        bad_read_count = 0
 
         while time.time() - t0 < timeout:
             if self.emergency_active:
@@ -252,18 +263,32 @@ class PickNode(Node):
                 try:
                     r = self.mc.is_in_position(target, mode)
                 except Exception as e:
-                    self.get_logger().warn(f"[WAIT] is_in_position 예외: {e} - diff 폴백 전환")
+                    self.get_logger().warn(f"[WAIT] is_in_position 예외: {e}")
                     r = None
 
                 if r == 1:
                     if not self._safe_sleep(settle):
                         return False
                     return True
+
                 if r not in (0, 1):
+                    bad_read_count += 1
                     self.get_logger().warn(
-                        f"[WAIT] is_in_position 신뢰불가(r={r}) - diff 폴백 전환"
+                        f"[WAIT] is_in_position 신뢰불가(r={r}) "
+                        f"- 재확인 {bad_read_count}/{IS_IN_POSITION_RETRY_MAX}"
                     )
-                    use_fallback = True
+                    if bad_read_count >= IS_IN_POSITION_RETRY_MAX:
+                        self.get_logger().warn(
+                            "[WAIT] is_in_position 반복 신뢰불가 - diff 폴백 전환"
+                        )
+                        use_fallback = True
+                    else:
+                        if not self._safe_sleep(IS_IN_POSITION_RETRY_INTERVAL):
+                            return False
+                    continue
+
+                # r == 0: 아직 도달 안 함(정상 응답) - 신뢰불가 카운터 리셋
+                bad_read_count = 0
 
             if use_fallback:
                 cur = self.mc.get_angles() if mode == 0 else self.mc.get_coords()
@@ -492,7 +517,8 @@ class PickNode(Node):
 
             if not self._wait_in_position(
                 angles, mode=0,
-                timeout=max(WAIT_ANGLES_TIMEOUT, OBSERVE_SETTLE_WAIT + 3.0)
+                timeout=max(WAIT_ANGLES_TIMEOUT, OBSERVE_SETTLE_WAIT + 3.0),
+                settle=SETTLE_AFTER_ARRIVE_OBSERVE
             ):
                 self._log("[OBSERVE] 도달 확인 실패(타임아웃) - 관측 자세 발행 안 함")
                 return
@@ -540,7 +566,8 @@ class PickNode(Node):
 
             if not self._wait_in_position(
                 angles, mode=0,
-                timeout=max(WAIT_ANGLES_TIMEOUT, OBSERVE_SETTLE_WAIT + 3.0)
+                timeout=max(WAIT_ANGLES_TIMEOUT, OBSERVE_SETTLE_WAIT + 3.0),
+                settle=SETTLE_AFTER_ARRIVE_OBSERVE
             ):
                 self._log("[QR OBSERVE] 도달 확인 실패(타임아웃) - /observe_pose 발행 못 함")
                 return
