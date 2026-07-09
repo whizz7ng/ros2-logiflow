@@ -304,22 +304,29 @@ class PickNode(Node):
                 if self.emergency_active:
                     return False
                 if cur is not None:
-                    tol_pos = 2.0 if mode == 0 else 3.0   # deg 또는 mm
-                    tol_rot = 2.0 if mode == 0 else 5.0
+                    if mode == 0:
+                        # angles mode: 6개 모두 관절각(deg)
+                        tol_pos = 3.0
+                        tol_rot = 5.0
+                    else:
+                        # coords mode: 앞 3개는 mm, 뒤 3개는 deg
+                        tol_pos = 3.0
+                        tol_rot = 5.0
+                
                     diffs = [abs(c - t) for c, t in zip(cur, target)]
-
+                
                     self.get_logger().info(
                         f"[WAIT DEBUG] mode={mode} "
                         f"cur={[round(v, 1) for v in cur]} "
                         f"target={[round(v, 1) for v in target]} "
                         f"diff={[round(v, 1) for v in diffs]}"
                     )
-                  
+                
                     if all(d <= tol_pos for d in diffs[:3]) and all(d <= tol_rot for d in diffs[3:]):
                         if not self._safe_sleep(settle):
                             return False
                         return True
-
+                      
             time.sleep(poll)
 
         self.get_logger().warn(
