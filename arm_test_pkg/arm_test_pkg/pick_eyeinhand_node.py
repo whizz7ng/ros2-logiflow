@@ -740,12 +740,14 @@ class PickNode(Node):
                 self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
                 if not self._safe_sleep(2.5):
                     return
-                
+                  
                 # 8. 파지 성공 여부 확인
-                if not self._check_gripped():
-                    self._log("[1F] 파지 실패 - 안전 후퇴 후 재관측 요청")
+                grip_result = self._check_gripped()
                 
-                    # 실패했으므로 그리퍼 다시 열기
+                if grip_result is False:
+                    self._log("[1F] 파지 실패 확정 - 안전 후퇴 후 재관측 요청")
+                
+                    # 진짜 빈손으로 확인된 경우에만 그리퍼 다시 열기
                     self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
                     if not self._safe_sleep(1.0):
                         return
@@ -767,7 +769,11 @@ class PickNode(Node):
                     self._pub_pick_status("pick_failed")
                     return
                 
-                self._log("[1F] 파지 성공")
+                elif grip_result is None:
+                    self._log("[1F] 파지 판정 불가(None) - 그리퍼 닫은 상태 유지하고 성공 루틴 진행")
+                
+                else:
+                    self._log("[1F] 파지 성공")
                 
                 # 8. 뒤로 곧게 빼기
                 back_1f = [x - 80, y + FORWARD_Y_COMP, z + 20, rx, ry, rz]
