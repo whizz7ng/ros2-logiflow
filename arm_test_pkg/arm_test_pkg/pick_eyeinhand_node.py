@@ -865,10 +865,20 @@ class PickNode(Node):
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
                 self.mc.send_coords(target, DESCEND_SPEED, 0)
                 if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                    self._log("[1F] 전진 파지 도달 실패 - 중단")
-                    self._pub_pick_status("error")
+                    self._log("[1F] 전진 파지 도달 실패 - 재관측 요청")
+                
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
+                    if self.emergency_active:
+                        return
+                
+                    self._log("[1F FAIL] 홈 복귀 후 재관측")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                
+                    self._pub_pick_status("pick_failed")
                     return
-
+                  
                 # 7. 그리퍼 닫기
                 self._log("[1F] 그리퍼 닫기")
                 self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
