@@ -1082,8 +1082,10 @@ class PickNode(Node):
             self._log("[PLACE 1/7] place-ready 관절 waypoint 이동")
             self.mc.send_angles(PLACE_READY_ANGLES, MOVE_SPEED)
             if not self._wait_in_position(PLACE_READY_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                self._log("[PLACE] place-ready 도달 실패 - 중단")
-                self._pub_pick_status("error")
+                self._log("[PLACE] place-ready 도달 실패 - 그리퍼 열지 않고 place 재시도 요청")
+            
+                # 물체를 잡고 있는 상태이므로 그리퍼는 열지 않는다.
+                self._pub_pick_status("place_failed")
                 return
             
             self._safe_sleep(0.5)
