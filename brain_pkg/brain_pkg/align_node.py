@@ -84,7 +84,7 @@ BLOCK_FORWARD_SEC = 0.50
 
 # ===== [마커 미검출 시 회전 탐색] =====
 NO_MARKER_SEARCH_WZ = ALIGN_WZ     # 제자리 회전 속도
-NO_MARKER_SEARCH_SEC = 0.30      # 한 번 회전 시간
+NO_MARKER_SEARCH_SEC = 0.80      # 한 번 회전 시간
 NO_MARKER_SEARCH_MAX = 8         # 같은 방향 최대 탐색 횟수
 
 # 부호가 반대로 움직이면 아래만 바꿀 것.
