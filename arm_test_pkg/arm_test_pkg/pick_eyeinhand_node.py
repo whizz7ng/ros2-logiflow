@@ -381,68 +381,77 @@ class PickNode(Node):
         """그리퍼 파지 판정.
         반환값:
           True  = 물림 확정
-          False = 빈손 확정
-          None  = 피드백 불가
-
-        동작:
-          - 값이 나오면 GRIP_SUCCESS_THRESH 기준으로 판단
-          - None이면 그리퍼 닫기 명령을 재전송하고 다시 읽음
-          - 끝까지 None이면 실패로 단정하지 않고 None 반환
+          False = 빈손/피드백 불가
+    
+        기준:
+          - gripper_value를 10번 읽음
+          - 그중 GRIP_SUCCESS_THRESH 이하 값이 2개 이상이면 물림
+          - 값이 높게 나오면 빈손
+          - None이 많거나 유효값이 부족하면 실패
         """
-
-        CLOSE_RETRY_MAX = 3        # None일 때 닫기 명령 재시도 횟수
-        READ_TRIES = 5             # 각 시도마다 value 읽는 횟수
-        READ_INTERVAL = 0.2
-
-        for close_try in range(CLOSE_RETRY_MAX + 1):
-            val = None
-
-            if close_try > 0:
+    
+        READ_TRIES = 10
+        READ_INTERVAL = 0.20
+    
+        # 10번 중 2번 이상 임계값 이하이면 잡은 것으로 판정
+        REQUIRED_HITS = 2
+    
+        vals = []
+    
+        # 닫기 명령 한 번 더 보내서 판정 직전 상태를 확실히 함
+        try:
+            self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
+            self._wait_gripper_settled(timeout=1.0)
+        except Exception as e:
+            self.get_logger().warn(f"[GRIP CHECK] 닫기 명령 예외: {e}")
+    
+        if self.emergency_active:
+            return False
+    
+        for read_try in range(READ_TRIES):
+            try:
+                v = self.mc.get_gripper_value()
+            except Exception as e:
                 self.get_logger().warn(
-                    f"[GRIP CHECK] gripper_value=None → 닫기 명령 재시도 {close_try}/{CLOSE_RETRY_MAX}"
+                    f"[GRIP CHECK] read_try={read_try+1}/{READ_TRIES} 예외: {e}"
                 )
-                self.mc.set_gripper_value(GRIPPER_CLOSE, GRIPPER_SPEED)
-                self._wait_gripper_settled(timeout=1.0)
-                if self.emergency_active:
-                    return None
-
-            for read_try in range(READ_TRIES):
-                try:
-                    v = self.mc.get_gripper_value()
-                except Exception as e:
-                    self.get_logger().warn(
-                        f"[GRIP CHECK] close_try={close_try} read_try={read_try+1} 예외: {e}"
-                    )
-                    v = None
-
-                self.get_logger().info(
-                    f"[GRIP CHECK] close_try={close_try} read_try={read_try+1} raw_value={v}"
-                )
-
-                if v is not None:
-                    val = v
-                    break
-
-                time.sleep(READ_INTERVAL)
-
-            if val is None:
-                continue
-
-            gripped = val >= GRIP_SUCCESS_THRESH
-
+                v = None
+    
             self.get_logger().info(
-                f"[GRIP CHECK] gripper_value={val}, "
-                f"close_cmd={GRIPPER_CLOSE}, success_thresh={GRIP_SUCCESS_THRESH} "
-                f"→ {'물림' if gripped else '빈손'}"
+                f"[GRIP CHECK] read_try={read_try+1}/{READ_TRIES} raw_value={v}"
             )
-
-            return gripped
-
-        self.get_logger().warn(
-            "[GRIP CHECK] 닫기 재시도 후에도 gripper_value=None "
-            "→ 피드백 불가, 실패로 단정하지 않음"
+    
+            if v is not None:
+                try:
+                    vals.append(float(v))
+                except Exception:
+                    self.get_logger().warn(f"[GRIP CHECK] 숫자 변환 불가 raw_value={v}")
+    
+            time.sleep(READ_INTERVAL)
+    
+        if len(vals) == 0:
+            self.get_logger().warn(
+                "[GRIP CHECK] 유효 gripper_value 없음 → 파지 실패"
+            )
+            return False
+    
+        hit_vals = [v for v in vals if v >= GRIP_SUCCESS_THRESH]
+        hit_count = len(hit_vals)
+    
+        self.get_logger().info(
+            f"[GRIP CHECK] vals={[round(v, 1) for v in vals]}, "
+            f"hit_count={hit_count}/{READ_TRIES}, "
+            f"success_thresh<={GRIP_SUCCESS_THRESH}, "
+            f"required_hits={REQUIRED_HITS}"
         )
-        return None
+    
+        gripped = hit_count >= REQUIRED_HITS
+    
+        self.get_logger().info(
+            f"[GRIP CHECK] 판정 → {'물림' if gripped else '빈손'}"
+        )
+    
+        return gripped
 
     def _parse_coords(self, msg: Float32MultiArray):
         coords = [round(float(v), 2) for v in msg.data]
