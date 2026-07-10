@@ -85,7 +85,7 @@ OBSERVE_SETTLE_WAIT = 4.0
 GRIPPER_OPEN = 100
 GRIPPER_CLOSE = 30
 
-GRIP_SUCCESS_THRESH = 40   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
+GRIP_SUCCESS_THRESH = 50   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
 
 # =========================
 # 피킹 보정값
@@ -394,7 +394,7 @@ class PickNode(Node):
         READ_INTERVAL = 0.20
     
         # 10번 중 2번 이상 임계값 이하이면 잡은 것으로 판정
-        REQUIRED_HITS = 2
+        REQUIRED_HITS = 5
     
         vals = []
     
