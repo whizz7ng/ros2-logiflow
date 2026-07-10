@@ -67,7 +67,7 @@ FRONTAL_SETTLE_SEC = 0.8
 FRONTAL_STABLE_COUNT = 5
 
 # 부호가 반대로 돌면 여기만 -1.0으로
-SIGN_YAW = -1.0
+SIGN_YAW = 1.0
 ALIGN_WZ = 0.41
 
 # ===== [블록 기반 x/y 보정] =====
