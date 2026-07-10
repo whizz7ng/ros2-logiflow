@@ -68,6 +68,7 @@ FRONTAL_STABLE_COUNT = 5
 
 # 부호가 반대로 돌면 여기만 -1.0으로
 SIGN_YAW = 1.0
+YAW_OUTLIER_MAX_JUMP = 15.0   # deg, 실측 조정
 ALIGN_WZ = 0.41
 
 # ===== [블록 기반 x/y 보정] =====
@@ -120,6 +121,7 @@ class AgvAlignNode(Node):
         self.frontal_settle_until = 0.0
         self.frontal_stable_count = 0
         self.active_pulse_kind = None
+        self.last_good_err_yaw = None
       
         # ===== [펄스 이동 상태] =====
         self.active_cmd = Twist()
@@ -245,6 +247,7 @@ class AgvAlignNode(Node):
         has_right_yaw = not math.isnan(ryaw)
 
         if not has_left_yaw and not has_right_yaw:
+            self.last_good_err_yaw = None
             # [변경] 마커가 둘 다 안 보이면 정지하지 않고, 보일 때까지
             # 무제한으로 전진 pulse를 반복한다. (관측 거리가 짧게 설계돼
             # 있어서, 안 보이는 주된 이유가 "너무 멀어서"인 경우가 실제로
@@ -270,6 +273,16 @@ class AgvAlignNode(Node):
         if has_right_yaw:
             yaw_errs.append(ryaw - yaw_tgt[MARKER_ID_RIGHT])
         err_yaw_frontal = sum(yaw_errs) / len(yaw_errs)
+
+        if self.last_good_err_yaw is not None:
+            jump = abs(err_yaw_frontal - self.last_good_err_yaw)
+            if jump > YAW_OUTLIER_MAX_JUMP:
+                self.get_logger().warn(
+                    f'[정렬] yaw 아웃라이어 감지 (직전={self.last_good_err_yaw:.1f} '
+                    f'현재={err_yaw_frontal:.1f} jump={jump:.1f}) - 이 프레임 무시'
+                )
+                return
+        self.last_good_err_yaw = err_yaw_frontal
 
         now = time.time()
 
