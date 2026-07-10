@@ -364,25 +364,33 @@ class BrainNode(Node):
         if self.emergency_active:
             self.get_logger().warn('/box_pose 수신했지만 비상정지 상태라 무시')
             return
-
-        self.get_logger().info(f'/box_pose 수신: {list(msg.data)}')
-        self.get_logger().info(
-            f'[KPI BRAIN] event=box_pose state={self.state} '
-            f'coords={list(msg.data)}'
-        )
-
+    
+        # 1) VISION 상태가 아니면 box_pose 무시
         if self.state != 'VISION':
             self.get_logger().warn(
                 f'현재 상태가 VISION이 아니므로 /box_pose 무시. 현재 상태: {self.state}'
             )
             return
-
+    
+        # 2) AGV 보정 step_done 기다리는 중이면 box_pose 무시
+        if self.waiting_align_step:
+            self.get_logger().warn(
+                '[BRAIN] AGV 보정 step_done 대기 중이므로 /box_pose 무시'
+            )
+            return
+    
+        self.get_logger().info(f'/box_pose 수신: {list(msg.data)}')
+        self.get_logger().info(
+            f'[KPI BRAIN] event=box_pose state={self.state} '
+            f'coords={list(msg.data)}'
+        )
+    
         self.align_retry_count = 0
         self.waiting_align_step = False
-
+    
         self.state = 'PICKING'
         self._pub_state()
-
+    
         self._pick_command_pub.publish(msg)
         self.get_logger().info('/pick_command 발행')
 
