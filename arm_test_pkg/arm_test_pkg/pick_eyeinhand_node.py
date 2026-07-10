@@ -134,7 +134,7 @@ DESCEND_SPEED = 8
 # send_angles 이동 후 도달 확인 타임아웃(초). 기존 sleep 값 + 여유.
 WAIT_ANGLES_TIMEOUT = 15.0
 # send_coords 이동 후 도달 확인 타임아웃(초).
-WAIT_COORDS_TIMEOUT = 8.0
+WAIT_COORDS_TIMEOUT = 10.0
 # 도달 확인 후 진동/떨림 안정화 대기(초)
 # - 일반 이동: 0.5초
 # - 관측 자세(동적 T용 get_coords 정확도가 중요한 곳)는 더 길게(0.8초) 사용
@@ -338,7 +338,7 @@ class PickNode(Node):
             
                     else:
                         # coords 모드: xyz는 mm, rpy는 deg
-                        xyz_tol = 15.0
+                        xyz_tol = 25.0
                         rpy_tol = 5.0
             
                         if all(d <= xyz_tol for d in diffs[:3]) and all(d <= rpy_tol for d in diffs[3:]):
@@ -818,6 +818,11 @@ class PickNode(Node):
                     self._log("[1F] y축 이동 도달 실패 - 중단")
                     self._pub_pick_status("error")
                     return
+
+                # self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                # self._safe_sleep(2.0)
+                # if self.emergency_active:
+                #     return
 
                 # 6. 수평 전진 파지 (x만)
                 FORWARD_Y_COMP = 0.0
