@@ -716,19 +716,19 @@ class BrainNode(Node):
         )
 
         if status == 'aligned':
-            # ===== FRONTAL_ALIGN 단계 완료 → 곧바로 블록 검출 시작 =====
+            # FRONTAL_ALIGN 단계 완료 → 곧바로 블록 검출 시작
             if self.state == 'FRONTAL_ALIGN':
                 self.get_logger().info('정면정렬 완료(aligned) → 블록 검출 시작')
                 self.state = 'VISION'
                 self.waiting_align_step = False
                 self._pub_state()
-        
+
                 activate_data = f'{self.item}:{self.level}'
                 self._publish_string(self._vision_activate_pub, activate_data)
                 self.get_logger().info(f'/vision_activate 발행: {activate_data}')
                 return
-        
-            # ===== VISION 상태에서의 aligned는 "내가 기다리던 aligned"일 때만 처리 =====
+
+            # VISION 상태에서의 aligned는 내가 기다리던 aligned일 때만 처리
             if self.state == 'VISION':
                 if not self.waiting_align_step:
                     self.get_logger().warn(
@@ -736,36 +736,33 @@ class BrainNode(Node):
                         '→ 중복/늦은 aligned로 보고 무시'
                     )
                     return
-        
+
                 self.waiting_align_step = False
                 self.align_retry_count = 0
-        
+
                 self.get_logger().info(
                     '정면 재확인 완료(aligned) → 재관측(정면정렬부터) 후 블록 검출'
                 )
-        
+
                 self.state = 'OBSERVING'
                 self._pub_state()
-        
+
                 self._publish_string(self._observe_move_pub, str(self.level))
                 self.get_logger().info(
                     f'/observe_move 재발행: level={self.level} (align aligned 후 재관측)'
                 )
                 return
-              
 
-    self.get_logger().warn(
-        f'align aligned 수신했지만 처리 대상 상태가 아님: {self.state}'
-    )
-    return
+            self.get_logger().warn(
+                f'align aligned 수신했지만 처리 대상 상태가 아님: {self.state}'
+            )
+            return
 
         if status != 'step_done':
             self.get_logger().warn(f'알 수 없는 align_status: {status}')
             return
 
-        # ===== [신규] FRONTAL_ALIGN 단계의 step_done은 별도 처리 불필요 =====
-        # 팔은 안 움직였으므로 재관측 없이, vision이 다음 프레임에서
-        # marker_agv_pose를 다시 보내 agv_align_node가 알아서 재평가한다.
+        # FRONTAL_ALIGN 단계의 step_done은 별도 처리 불필요
         if self.state == 'FRONTAL_ALIGN':
             return
 
@@ -776,7 +773,7 @@ class BrainNode(Node):
             )
             return
 
-        # ===== [QR PLACE] QR 거리 보정 step_done 처리 =====
+        # QR PLACE 거리 보정 step_done 처리
         if self.state == 'PLACE_VISION':
             self.waiting_align_step = False
             self.align_retry_count += 1
@@ -796,7 +793,7 @@ class BrainNode(Node):
             )
             return
 
-        # ===== [블록 기반 x/y 보정] too_far/side_left/side_right 등 step_done =====
+        # 블록 기반 x/y 보정 step_done 처리
         if self.state != 'VISION':
             self.get_logger().warn(
                 f'align step_done 수신했지만 현재 상태가 VISION이 아님: {self.state}'
