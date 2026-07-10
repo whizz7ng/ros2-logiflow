@@ -92,7 +92,7 @@ SIGN_Y = 1.0
 BLOCK_LEFT_SIGN  =  1.0   # block_left 요청 시 y 부호
 BLOCK_RIGHT_SIGN =  -1.0   # block_right 요청 시 y 부호
 BLOCK_SIDE_VY = 0.08
-BLOCK_SIDE_SEC = 0.5
+BLOCK_SIDE_SEC = 0.8
 
 # QR place 전용 전진 pulse (기존 그대로)
 QR_FORWARD_VX = 0.07
