@@ -630,6 +630,7 @@ class BrainNode(Node):
             self.level = DEFAULT_LEVEL
             self.align_retry_count = 0
             self.pick_retry_count = 0
+            self.place_retry_count = 0
             self.waiting_align_step = False
             self._pub_state()
 
@@ -801,11 +802,7 @@ class BrainNode(Node):
         self.get_logger().warn(f'/emergency_stop 수신: {command}')
 
         if command in ['stop', 'emergency', 'emergency_stop', 'true', '1', 'on']:
-            self._enter_emergency_stop()
-        elif command in ['reset', 'release', 'clear', 'false', '0', 'off']:
-            self._release_emergency_stop()
-        else:
-            self.get_logger().warn(f'알 수 없는 emergency_stop 명령: {msg.data}')
+       _release_emergency_stop()emergency_stop 명령: {msg.data}')
 
     # ============================================================
     # Emergency stop
@@ -838,6 +835,7 @@ class BrainNode(Node):
         self.level = DEFAULT_LEVEL
         self.align_retry_count = 0
         self.pick_retry_count = 0
+        self.place_retry_count = 0
         self.waiting_align_step = False
         self.state = 'IDLE'
         self._pub_state()
