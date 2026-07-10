@@ -58,7 +58,7 @@ YAW_TARGET = {
 # 정면정렬 허용 오차(deg) / 회전 게인(부호 판단용) / 펄스 시간
 TOL_YAW_FRONTAL = 10.0
 GAIN_YAW_FRONTAL = 0.01
-PULSE_YAW_FRONTAL_SEC = 0.35
+PULSE_YAW_FRONTAL_SEC = 0.50
 
 # 정면정렬 pulse 이후 안정화 시간
 FRONTAL_SETTLE_SEC = 0.8
