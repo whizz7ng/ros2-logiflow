@@ -715,7 +715,7 @@ class BrainNode(Node):
             f'waiting_align_step={self.waiting_align_step}'
         )
 
-       if status == 'aligned':
+        if status == 'aligned':
             # ===== FRONTAL_ALIGN 단계 완료 → 곧바로 블록 검출 시작 =====
             if self.state == 'FRONTAL_ALIGN':
                 self.get_logger().info('정면정렬 완료(aligned) → 블록 검출 시작')
