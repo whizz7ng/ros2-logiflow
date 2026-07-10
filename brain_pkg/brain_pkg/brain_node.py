@@ -95,7 +95,7 @@ class BrainNode(Node):
         self.ALIGN_RETRY_MAX = 20
 
         self.pick_retry_count = 0
-        self.PICK_REOBSERVE_MAX = 1
+        self.PICK_REOBSERVE_MAX = 3
 
         # True일 때만 /align_status step_done을 처리한다 (VISION/PLACE_VISION 단계용).
         self.waiting_align_step = False
