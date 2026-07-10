@@ -1112,13 +1112,26 @@ class PickNode(Node):
             self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
 
             self._log("[PLACE 3/7] z축 수직 하강")
+
             self.mc.send_coords(target, DESCEND_SPEED, 1)
-            if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                self._log("[PLACE] 하강 도달 실패 - 그리퍼 열지 않고 place 재시도 요청")
             
-                # 물체를 잡은 상태 유지
-                # 너무 낮은 위치일 수 있으니 먼저 살짝 상승 시도
-                safe_lift = [target[0], target[1], target[2] + PLACE_APPROACH_Z_MM, target[3], target[4], target[5]]
+            # place 하강은 일반 _wait_in_position보다 널널하게 판정
+            # 이유: 실제 로그에서 x/y/rpy는 거의 맞는데 z만 약 35~40mm 덜 내려가는 경우가 있음
+            if not self._safe_sleep(4.0):
+                return
+            
+            cur = self._safe_get_coords()
+            if cur is None:
+                self._log("[PLACE] 하강 후 get_coords 실패 - 그리퍼 열지 않고 place 재시도 요청")
+            
+                safe_lift = [
+                    target[0],
+                    target[1],
+                    target[2] + PLACE_APPROACH_Z_MM,
+                    target[3],
+                    target[4],
+                    target[5],
+                ]
                 self.mc.send_coords(safe_lift, MOVE_SPEED, 1)
                 self._safe_sleep(2.0)
             
@@ -1127,6 +1140,59 @@ class PickNode(Node):
             
                 self._pub_pick_status("place_failed")
                 return
+            
+            place_down_diff = [abs(cur[i] - target[i]) for i in range(6)]
+            
+            self._log(
+                f"[PLACE DEBUG] 하강 후 현재: {[round(v, 1) for v in cur]}, "
+                f"target={[round(v, 1) for v in target]}, "
+                f"diff={[round(v, 1) for v in place_down_diff]}"
+            )
+            
+            # place 하강 전용 허용오차
+            # x/y는 거의 맞아야 하고, z는 덜 내려가는 경우를 고려해서 널널하게 허용
+            PLACE_DOWN_XY_TOL = 40.0    # mm
+            PLACE_DOWN_Z_TOL = 50.0     # mm
+            PLACE_DOWN_RPY_TOL = 30.0   # deg
+            
+            place_down_ok = (
+                place_down_diff[0] <= PLACE_DOWN_XY_TOL and
+                place_down_diff[1] <= PLACE_DOWN_XY_TOL and
+                place_down_diff[2] <= PLACE_DOWN_Z_TOL and
+                place_down_diff[3] <= PLACE_DOWN_RPY_TOL and
+                place_down_diff[4] <= PLACE_DOWN_RPY_TOL and
+                place_down_diff[5] <= PLACE_DOWN_RPY_TOL
+            )
+            
+            if not place_down_ok:
+                self._log(
+                    "[PLACE] 하강 위치 차이 큼 - 그리퍼 열지 않고 place 재시도 요청 "
+                    f"(허용: xy<={PLACE_DOWN_XY_TOL}mm, z<={PLACE_DOWN_Z_TOL}mm, "
+                    f"rpy<={PLACE_DOWN_RPY_TOL}deg)"
+                )
+            
+                # 물체를 잡은 상태 유지
+                safe_lift = [
+                    target[0],
+                    target[1],
+                    target[2] + PLACE_APPROACH_Z_MM,
+                    target[3],
+                    target[4],
+                    target[5],
+                ]
+                self.mc.send_coords(safe_lift, MOVE_SPEED, 1)
+                self._safe_sleep(2.0)
+            
+                self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+            
+                self._pub_pick_status("place_failed")
+                return
+            
+            self._log(
+                f"[PLACE] 하강 도달 허용 범위 통과 "
+                f"(xy_tol={PLACE_DOWN_XY_TOL}, z_tol={PLACE_DOWN_Z_TOL}, rpy_tol={PLACE_DOWN_RPY_TOL})"
+            )
 
             # self._log("[PLACE 3/7] z축 수직 하강")
             # self.mc.send_coords(target, DESCEND_SPEED, 1)
