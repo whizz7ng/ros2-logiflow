@@ -819,10 +819,27 @@ class PickNode(Node):
                     self._pub_pick_status("error")
                     return
 
+                # 4. y축 이동 - 블록 y로 정렬
+                # 너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
+                # 현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
+                # Y_ALIGN_CLEARANCE_Z_1F = 30.0
+                
+                # safe_y_z = max(cur[2], z + Y_ALIGN_CLEARANCE_Z_1F)
+                
+                # y_move = [cur[0], y, safe_y_z, rx, ry, rz]
+                # self._log(f"[1F] y축 이동 (안전 높이 정렬): {[round(v,1) for v in y_move]}")
+                # self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                # if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+                #     self._log("[1F] y축 이동 도달 실패 - 중단")
+                #     self._pub_pick_status("error")
+                #     return
+
                 # self.mc.send_coords(y_move, MOVE_SPEED, 0)
                 # self._safe_sleep(2.0)
                 # if self.emergency_active:
                 #     return
+
+                
 
                 # 6. 수평 전진 파지 (x만)
                 FORWARD_Y_COMP = 0.0
