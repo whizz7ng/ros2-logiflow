@@ -73,7 +73,7 @@ ALIGN_WZ = 0.41
 
 # ===== [블록 기반 x/y 보정] =====
 # brain이 /align_request로 방향만 요청하면, 여기선 정해진 크기로 짧게 펄스.
-BLOCK_FORWARD_VX = 0.08
+BLOCK_FORWARD_VX = 0.07
 BLOCK_FORWARD_SEC = 0.50
 
 # (관측 거리가 짧게 설계돼 있어서, 마커가 안 보이는 주된 이유는
