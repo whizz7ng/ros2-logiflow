@@ -76,7 +76,7 @@ SAFE_ENTRY_1F_ANGLES = [8.17, -27.94, -129.37, 126.38, 54.31, -45.87]
 # 플레이스 전용 중간 관절 자세
 # HOME에서 place 좌표로 바로 send_coords하면 IK가 꼬일 수 있어서
 # 먼저 팔 모양을 안정적인 형태로 만들어준다.
-PLACE_READY_ANGLES = [0.0, 60.0, -120.0, 30.0, 0.0, -45.0]
+PLACE_READY_ANGLES = [0.0, 85.0, -125.0, 10.0, 0.0, -45.0]
 
 # 관측 자세 이동 후 정착 대기(초). 피드백 도달 확인의 타임아웃 기준으로 사용.
 OBSERVE_SETTLE_WAIT = 4.0
@@ -1021,30 +1021,30 @@ class PickNode(Node):
 
             self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
 
-            self._log("[PLACE 2/6] z축 수직 하강")
+            self._log("[PLACE 3/7] z축 수직 하강")
             self.mc.send_coords(target, DESCEND_SPEED, 1)
             if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                 self._log("[PLACE] 하강 도달 실패 - 중단")
                 self._pub_pick_status("error")
                 return
 
-            self._log("[PLACE 3/6] 그리퍼 열기 (내려놓기)")
+            self._log("[PLACE 4/7] 그리퍼 열기 (내려놓기)")
             self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
             self._wait_gripper_settled(timeout=2.0)
             if self.emergency_active:
                 return
 
-            self._log("[PLACE 4/6] z축 상승")
+            self._log("[PLACE 5/7] z축 상승")
             self.mc.send_coords(lifted, MOVE_SPEED, 1)
             if not self._wait_in_position(lifted, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                 self._log("[PLACE] 상승 도달 실패 - 계속 진행")
 
-            self._log("[PLACE 5/6] 홈포지션 복귀")
+            self._log("[PLACE 6/7] 홈포지션 복귀")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             if not self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
                 self._log("[PLACE] 홈 복귀 도달 실패(타임아웃) - 계속 진행")
 
-            self._log("[PLACE 6/6] 플레이스 완료")
+            self._log("[PLACE 7/7] 플레이스 완료")
             self._pub_pick_status("placing_done")
 
         except Exception as e:
