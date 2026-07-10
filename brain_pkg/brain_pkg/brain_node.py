@@ -97,6 +97,9 @@ class BrainNode(Node):
         self.pick_retry_count = 0
         self.PICK_REOBSERVE_MAX = 3
 
+        self.place_retry_count = 0
+        self.PLACE_RETRY_MAX = 3
+
         # True일 때만 /align_status step_done을 처리한다 (VISION/PLACE_VISION 단계용).
         self.waiting_align_step = False
 
@@ -163,6 +166,7 @@ class BrainNode(Node):
 
         self.align_retry_count = 0
         self.pick_retry_count = 0
+        self.place_retry_count = 0
         self.waiting_align_step = False
 
         self.get_logger().info(
@@ -194,6 +198,7 @@ class BrainNode(Node):
         self.level = DEFAULT_LEVEL
         self.align_retry_count = 0
         self.pick_retry_count = 0
+        self.place_retry_count = 0
         self.waiting_align_step = False
 
         if self.order_queue:
@@ -457,7 +462,42 @@ class BrainNode(Node):
             self.get_logger().info('/arm_status 발행: placed')
 
             self._finish_current_order()
-
+          
+        elif status == 'place_failed':
+            if self.state != 'PLACING':
+                self.get_logger().warn(
+                    f'place_failed 수신했지만 현재 상태가 PLACING이 아님: {self.state}'
+                )
+                return
+        
+            self.get_logger().warn('place_failed 수신 - QR 재관측 후 place 재시도 판단')
+        
+            if self.place_retry_count < self.PLACE_RETRY_MAX:
+                self.place_retry_count += 1
+        
+                self.get_logger().warn(
+                    f'place 재시도 {self.place_retry_count}/{self.PLACE_RETRY_MAX}'
+                )
+        
+                zone = self.zone if self.zone else 'A'
+        
+                self.state = 'QR_OBSERVING'
+                self.waiting_align_step = False
+                self._pub_state()
+        
+                self._publish_string(self._observe_move_pub, f'qr:{zone}')
+                self.get_logger().info(
+                    f'/observe_move 재발행: qr:{zone} (place_failed QR 재관측)'
+                )
+                return
+        
+            self.get_logger().error('place 재시도 초과 - ERROR 처리')
+            self.place_retry_count = 0
+            self.waiting_align_step = False
+            self.state = 'ERROR'
+            self._pub_state()
+            return
+      
         elif status == 'realign_fail':
             self.get_logger().warn('pick_node realign_fail 수신 - 정면 재확인 후 재관측 대기')
 
