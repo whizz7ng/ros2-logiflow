@@ -830,7 +830,7 @@ class PickNode(Node):
                 self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
 
                 # 4. y축 이동 - 블록 y로 정렬 (현재 x,z 유지, y만 블록으로)
-                y_move = [cur[0], y, cur[2], rx, ry, rz]
+                y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
                 self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
                 self.mc.send_coords(y_move, MOVE_SPEED, 0)   # 직선
                 if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
