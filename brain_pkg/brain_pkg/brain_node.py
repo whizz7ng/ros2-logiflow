@@ -538,11 +538,25 @@ class BrainNode(Node):
                 )
                 return
 
-            self.get_logger().error('pick 재관측 재시도 초과 - 픽 실패 처리')
+            self.get_logger().warn(
+                'pick 재관측 재시도 초과 - ERROR 처리하지 않고 다음 단계(NAV_TO_DEST)로 진행'
+            )
+            
+            # 재시도 관련 상태 초기화
             self.pick_retry_count = 0
+            self.align_retry_count = 0
             self.waiting_align_step = False
-            self.state = 'ERROR'
+            
+            # 실제로는 픽 실패지만, 전체 KPI 흐름 진행을 위해 다음 단계로 이동
+            self.state = 'NAV_TO_DEST'
             self._pub_state()
+            
+            # AGV 이동 흐름이 /arm_status picked를 기준으로 넘어간다면 필요
+            self._publish_string(self._arm_status_pub, 'picked')
+            self.get_logger().warn(
+                '/arm_status 발행: picked (pick 실패 재시도 초과, KPI 진행용)'
+            )
+            
             return
 
         elif status == 'error':
