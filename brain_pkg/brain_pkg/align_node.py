@@ -80,11 +80,12 @@ BLOCK_FORWARD_SEC = 0.35
 # (관측 거리가 짧게 설계돼 있어서, 마커가 안 보이는 주된 이유는
 #  "너무 삐딱함"보다는 "너무 멀어서(nav가 일찍 멈춤)"인 경우가 실제로 있음.
 #  횟수/시간 제한 없이 보일 때까지 계속 전진 pulse.)
-NO_MARKER_FORWARD_VX = 0.08
-NO_MARKER_FORWARD_SEC = 0.35
+# NO_MARKER_FORWARD_VX = 0.08
+# NO_MARKER_FORWARD_SEC = 0.35
 
+ALIGN_WZ = 0.41
 # ===== [마커 미검출 시 회전 탐색] =====
-NO_MARKER_SEARCH_WZ = 0.41       # 제자리 회전 속도
+NO_MARKER_SEARCH_WZ = ALIGN_WZ     # 제자리 회전 속도
 NO_MARKER_SEARCH_SEC = 0.30      # 한 번 회전 시간
 NO_MARKER_SEARCH_MAX = 8         # 같은 방향 최대 탐색 횟수
 
@@ -286,7 +287,7 @@ class AgvAlignNode(Node):
                 )
         
             tw = Twist()
-            tw.angular.z = self.no_marker_search_dir * NO_MARKER_SEARCH_WZ
+            tw.angular.z = SIGN_YAW * self.no_marker_search_dir * NO_MARKER_SEARCH_WZ
         
             self.no_marker_search_count += 1
         
@@ -307,6 +308,16 @@ class AgvAlignNode(Node):
             yaw_errs.append(ryaw - yaw_tgt[MARKER_ID_RIGHT])
         err_yaw_frontal = sum(yaw_errs) / len(yaw_errs)
 
+        now = time.time()
+
+        # yaw/search pulse 직후에는 차체가 아직 흔들릴 수 있으므로 yaw 판정 금지
+        if now < self.frontal_settle_until:
+            remain = self.frontal_settle_until - now
+            self.get_logger().info(
+                f'[정렬] 안정화 대기 중 {remain:.2f}s - yaw 판정 보류'
+            )
+            return
+        
         if self.last_good_err_yaw is not None:
             jump = abs(err_yaw_frontal - self.last_good_err_yaw)
             if jump > YAW_OUTLIER_MAX_JUMP:
@@ -315,17 +326,8 @@ class AgvAlignNode(Node):
                     f'현재={err_yaw_frontal:.1f} jump={jump:.1f}) - 이 프레임 무시'
                 )
                 return
+
         self.last_good_err_yaw = err_yaw_frontal
-
-        now = time.time()
-
-        # yaw pulse 직후에는 차체가 아직 흔들릴 수 있으므로 aligned 판정 금지
-        if now < self.frontal_settle_until:
-            remain = self.frontal_settle_until - now
-            self.get_logger().info(
-                f'[정렬] 안정화 대기 중 {remain:.2f}s - yaw 판정 보류'
-            )
-            return
 
         if abs(err_yaw_frontal) >= TOL_YAW_FRONTAL:
             self._frontal_stop_sent = 0
