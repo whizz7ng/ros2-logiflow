@@ -393,7 +393,7 @@ class PickNode(Node):
         READ_TRIES = 10
         READ_INTERVAL = 0.20
     
-        # 10번 중 2번 이상 임계값 이하이면 잡은 것으로 판정
+        # 10번 중 REQUIRED_HITS번 이상 임계값 이상이면 잡은 것으로 판정
         REQUIRED_HITS = 5
     
         vals = []
@@ -454,18 +454,12 @@ class PickNode(Node):
         )
         
         gripped = hit_count >= REQUIRED_HITS
-        
+
         self.get_logger().info(
             f"[GRIP CHECK] 최종 판정 = {'물림 TRUE' if gripped else '빈손 FALSE'} "
             f"(hit_count={hit_count}, required={REQUIRED_HITS})"
         )
-            
-        gripped = hit_count >= REQUIRED_HITS
-    
-        self.get_logger().info(
-            f"[GRIP CHECK] 판정 → {'물림' if gripped else '빈손'}"
-        )
-    
+
         return gripped
 
     def _parse_coords(self, msg: Float32MultiArray):
@@ -906,8 +900,8 @@ class PickNode(Node):
                     self._pub_pick_status("pick_failed")
                     return
 
-                elif grip_result is None:
-                    self._log("[1F] 파지 판정 불가(None) - 그리퍼 닫은 상태 유지하고 성공 루틴 진행")
+                # elif grip_result is None:
+                #     self._log("[1F] 파지 판정 불가(None) - 그리퍼 닫은 상태 유지하고 성공 루틴 진행")
 
                 else:
                     self._log("[1F] 파지 성공")
@@ -941,8 +935,19 @@ class PickNode(Node):
                 self._log(f"[2F] 전진 파지: {[round(v,1) for v in fwd]}")
                 self.mc.send_coords(fwd, DESCEND_SPEED, 1)   # 직선 전진
                 if not self._wait_in_position(fwd, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                    self._log("[2F] 전진 파지 도달 실패 - 중단")
-                    self._pub_pick_status("error")
+                    self._log("[2F] 전진 파지 도달 실패 - 재관측 요청")
+                
+                    # 아직 그리퍼 닫기 전이라 파지 상태 아님. 안전하게 열어둠.
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
+                    if self.emergency_active:
+                        return
+                
+                    self._log("[2F FAIL] 홈 복귀 후 재관측")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                
+                    self._pub_pick_status("pick_failed")
                     return
 
                 self._log("[2F] 그리퍼 닫기")
@@ -951,8 +956,10 @@ class PickNode(Node):
                 if self.emergency_active:
                     return
 
-                if not self._check_gripped():
-                    self._log("[2F] 파지 실패 - 안전 후퇴 후 재관측 요청")
+                grip_result = self._check_gripped()
+
+                if grip_result is not True:
+                    self._log(f"[2F] 파지 실패(grip_result={grip_result}) - 안전 후퇴 후 재관측 요청")
 
                     self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
                     self._wait_gripper_settled(timeout=1.0)
