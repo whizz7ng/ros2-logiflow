@@ -591,7 +591,8 @@ class PickNode(Node):
                 timeout=max(WAIT_ANGLES_TIMEOUT, OBSERVE_SETTLE_WAIT + 3.0),
                 settle=SETTLE_AFTER_ARRIVE_OBSERVE
             ):
-                self._log("[OBSERVE] 도달 확인 실패(타임아웃) - 관측 자세 발행 안 함")
+                self._log("[OBSERVE] 도달 확인 실패(타임아웃) - 재시도 요청")
+                self._pub_pick_status("pick_failed")
                 return
 
             # ★ 정지 후 실제 자세 읽어서 발행 (동적 T용) ★
@@ -806,8 +807,8 @@ class PickNode(Node):
                 self._log("[1F] 접은 진입 자세")
                 self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
                 if not self._wait_in_position(SAFE_ENTRY_1F_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                    self._log("[1F] 접은 진입 자세 도달 실패 - 중단")
-                    self._pub_pick_status("error")
+                    self._log("[1F] 접은 진입 자세 도달 실패 - 재관측 요청"")
+                    self._pub_pick_status("pick_failed")
                     return
 
                 # 2. J5 펴기 (접힘 해제 → 파지 좋은 관절 상태)
@@ -817,14 +818,14 @@ class PickNode(Node):
                 self.mc.send_angles(unfold, MOVE_SPEED)
                 if not self._wait_in_position(unfold, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
                     self._log("[1F] J5 펴기 도달 실패 - 중단")
-                    self._pub_pick_status("error")
+                    self._pub_pick_status("pick_failed")
                     return
 
                 # 3. 현재 자세 읽기 (J5 편 상태의 좌표)
                 cur = self._safe_get_coords()
                 if cur is None:
                     self._log("[1F] get_coords 실패 - 안전상 중단")
-                    self._pub_pick_status("error")
+                    self._pub_pick_status("pick_failed")
                     return
                 self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
 
@@ -833,8 +834,15 @@ class PickNode(Node):
                 self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
                 self.mc.send_coords(y_move, MOVE_SPEED, 0)   # 직선
                 if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                    self._log("[1F] y축 이동 도달 실패 - 중단")
-                    self._pub_pick_status("error")
+                    self._log("[1F] y축 이동 도달 실패 - 재관측 요청")
+                
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
+                
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                
+                    self._pub_pick_status("pick_failed")
                     return
 
                 # 4. y축 이동 - 블록 y로 정렬
@@ -936,8 +944,17 @@ class PickNode(Node):
                 self._log(f"[2F] 블록 앞으로: {[round(v,1) for v in front]}")
                 self.mc.send_coords(front, MOVE_SPEED, 0)
                 if not self._wait_in_position(front, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                    self._log("[2F] 블록 앞 이동 도달 실패 - 중단")
-                    self._pub_pick_status("error")
+                    self._log("[2F] 블록 앞 이동 도달 실패 - 재관측 요청")
+                
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
+                    if self.emergency_active:
+                        return
+                    self._log("[2F FAIL] 홈 복귀 후 재관측")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                  
+                    self._pub_pick_status("pick_failed")
                     return
 
                 FORWARD_Y_COMP_2F = 0.0
@@ -1076,8 +1093,16 @@ class PickNode(Node):
             
             if not self._wait_in_position(pre_place, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                 self._log("[PLACE] pre_place 도달 실패 - 현재 위치에서 놓지 않고 error 처리")
-                self._pub_pick_status("error")
+
+
+                # 물체를 잡은 상태 유지
+                # 가능한 경우 안전하게 홈 복귀만 시도
+                self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+            
+                self._pub_pick_status("place_failed")
                 return
+                
             
             if self.emergency_active:
                 return
@@ -1087,15 +1112,18 @@ class PickNode(Node):
             self._log("[PLACE 3/7] z축 수직 하강")
             self.mc.send_coords(target, DESCEND_SPEED, 1)
             if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                self._log("[PLACE] 하강 도달 실패 - 그래도 현재 위치에서 그리퍼 열고 place 처리")
+                self._log("[PLACE] 하강 도달 실패 - 그리퍼 열지 않고 place 재시도 요청")
             
-                try:
-                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
-                    self._wait_gripper_settled(timeout=1.5)
-                except Exception as e:
-                    self.get_logger().warn(f"[PLACE] 강제 그리퍼 열기 실패: {e}")
+                # 물체를 잡은 상태 유지
+                # 너무 낮은 위치일 수 있으니 먼저 살짝 상승 시도
+                safe_lift = [target[0], target[1], target[2] + PLACE_APPROACH_Z_MM, target[3], target[4], target[5]]
+                self.mc.send_coords(safe_lift, MOVE_SPEED, 1)
+                self._safe_sleep(2.0)
             
-                self._pub_pick_status("placing_done")
+                self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+            
+                self._pub_pick_status("place_failed")
                 return
 
             # self._log("[PLACE 3/7] z축 수직 하강")
