@@ -441,7 +441,7 @@ class PickNode(Node):
         self.get_logger().info(
             f"[GRIP CHECK] vals={[round(v, 1) for v in vals]}, "
             f"hit_count={hit_count}/{READ_TRIES}, "
-            f"success_thresh<={GRIP_SUCCESS_THRESH}, "
+            f"success_thresh>={GRIP_SUCCESS_THRESH}, "
             f"required_hits={REQUIRED_HITS}"
         )
     
