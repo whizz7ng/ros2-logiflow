@@ -385,8 +385,8 @@ class PickNode(Node):
     
         기준:
           - gripper_value를 10번 읽음
-          - 그중 GRIP_SUCCESS_THRESH 이하 값이 2개 이상이면 물림
-          - 값이 높게 나오면 빈손
+          - 그중 GRIP_SUCCESS_THRESH 이상 값이 2개 이상이면 물림
+          - 값이 낮게 나오면 끝까지 닫힌 상태 = 빈손
           - None이 많거나 유효값이 부족하면 실패
         """
     
@@ -1049,7 +1049,7 @@ class PickNode(Node):
 
             self._log("[PLACE 3/7] z축 수직 하강")
             self.mc.send_coords(target, DESCEND_SPEED, 1)
-            if not self._wait_in_position(place_down, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+            if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                 self._log("[PLACE] 하강 도달 실패 - 그래도 현재 위치에서 그리퍼 열고 place 처리")
             
                 try:
