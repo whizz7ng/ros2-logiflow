@@ -1036,14 +1036,14 @@ class PickNode(Node):
                 f"pre_place={[round(v,1) for v in pre_place]}"
             )
 
-            self._log("[PLACE 0/7] 홈 경유")
-            self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
-            if not self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                self._log("[PLACE] 홈 경유 실패 - 중단")
-                self._pub_pick_status("error")
-                return
+            # self._log("[PLACE 0/7] 홈 경유")
+            # self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+            # if not self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
+            #     self._log("[PLACE] 홈 경유 실패 - 중단")
+            #     self._pub_pick_status("error")
+            #     return
             
-            self._safe_sleep(0.5)
+            # self._safe_sleep(0.5)
             
             self._log("[PLACE 1/7] place-ready 관절 waypoint 이동")
             self.mc.send_angles(PLACE_READY_ANGLES, MOVE_SPEED)
@@ -1055,8 +1055,13 @@ class PickNode(Node):
             self._safe_sleep(0.5)
             
             self._log("[PLACE 2/7] 놓을 위치 위 waypoint 이동")
-            self.mc.send_coords(pre_place, MOVE_SPEED, 1)
-            self._safe_sleep(3.0)
+            self.mc.send_coords(pre_place, MOVE_SPEED, 0)
+            
+            if not self._wait_in_position(pre_place, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+                self._log("[PLACE] pre_place 도달 실패 - 현재 위치에서 놓지 않고 error 처리")
+                self._pub_pick_status("error")
+                return
+            
             if self.emergency_active:
                 return
 
