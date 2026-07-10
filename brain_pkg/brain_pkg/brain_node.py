@@ -473,13 +473,13 @@ class BrainNode(Node):
             return
 
         elif status == 'pick_failed':
-            if self.state != 'PICKING':
+            if self.state not in ('PICKING', 'OBSERVING', 'VISION', 'FRONTAL_ALIGN'):
                 self.get_logger().warn(
-                    f'pick_failed 수신했지만 현재 상태가 PICKING이 아님: {self.state}'
+                    f'pick_failed 수신했지만 재시도 가능한 상태가 아님: {self.state}'
                 )
                 return
-
-            self.get_logger().warn('pick_failed 수신 - 재관측 retry 판단')
+        
+            self.get_logger().warn(f'pick_failed 수신(state={self.state}) - 재관측 retry 판단')
 
             if self.pick_retry_count < self.PICK_REOBSERVE_MAX:
                 self.pick_retry_count += 1
