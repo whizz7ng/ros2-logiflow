@@ -1028,6 +1028,12 @@ class PickNode(Node):
                 self._pub_pick_status("error")
                 return
 
+            # self._log("[PLACE 3/7] z축 수직 하강")
+            # self.mc.send_coords(target, DESCEND_SPEED, 1)
+            # self._safe_sleep(2.5)
+            # if self.emergency_active:
+            #     return
+
             self._log("[PLACE 4/7] 그리퍼 열기 (내려놓기)")
             self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
             self._wait_gripper_settled(timeout=2.0)
@@ -1038,6 +1044,12 @@ class PickNode(Node):
             self.mc.send_coords(lifted, MOVE_SPEED, 1)
             if not self._wait_in_position(lifted, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                 self._log("[PLACE] 상승 도달 실패 - 계속 진행")
+
+            # self._log("[PLACE 5/7] z축 상승")
+            # self.mc.send_coords(lifted, MOVE_SPEED, 1)
+            # self._safe_sleep(2.5)
+            # if self.emergency_active:
+            #     return
 
             self._log("[PLACE 6/7] 홈포지션 복귀")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
