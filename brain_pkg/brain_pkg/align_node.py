@@ -76,14 +76,12 @@ ALIGN_WZ = 0.41
 BLOCK_FORWARD_VX = 0.08
 BLOCK_FORWARD_SEC = 0.35
 
-# ===== [신규] 마커가 둘 다 안 보일 때 - 보일 때까지 무제한 전진 =====
 # (관측 거리가 짧게 설계돼 있어서, 마커가 안 보이는 주된 이유는
 #  "너무 삐딱함"보다는 "너무 멀어서(nav가 일찍 멈춤)"인 경우가 실제로 있음.
 #  횟수/시간 제한 없이 보일 때까지 계속 전진 pulse.)
 # NO_MARKER_FORWARD_VX = 0.08
 # NO_MARKER_FORWARD_SEC = 0.35
 
-ALIGN_WZ = 0.41
 # ===== [마커 미검출 시 회전 탐색] =====
 NO_MARKER_SEARCH_WZ = ALIGN_WZ     # 제자리 회전 속도
 NO_MARKER_SEARCH_SEC = 0.30      # 한 번 회전 시간
@@ -142,7 +140,10 @@ class AgvAlignNode(Node):
         self.align_timer = self.create_timer(1.0 / CMD_HZ, self._timer_callback)
 
         self.get_logger().info(
-            'agv_align_node 시작 - 정면정렬(마커yaw) + 블록기반 x/y 보정(align_request)'
+            f'agv_align_node 시작 - 정면정렬 + 블록보정 | '
+            f'SIGN_YAW={SIGN_YAW}, ALIGN_WZ={ALIGN_WZ}, '
+            f'block_left_vy={SIGN_Y * BLOCK_LEFT_SIGN * BLOCK_SIDE_VY:.3f}, '
+            f'block_right_vy={SIGN_Y * BLOCK_RIGHT_SIGN * BLOCK_SIDE_VY:.3f}'
         )
 
     def _timer_callback(self):
