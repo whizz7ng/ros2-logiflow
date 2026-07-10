@@ -85,8 +85,8 @@ NO_MARKER_FORWARD_SEC = 0.35
 
 # 부호가 반대로 움직이면 아래만 바꿀 것.
 SIGN_Y = 1.0
-BLOCK_LEFT_SIGN  = -1.0   # block_left 요청 시 y 부호
-BLOCK_RIGHT_SIGN =  1.0   # block_right 요청 시 y 부호
+BLOCK_LEFT_SIGN  =  1.0   # block_left 요청 시 y 부호
+BLOCK_RIGHT_SIGN =  -1.0   # block_right 요청 시 y 부호
 BLOCK_SIDE_VY = 0.08
 BLOCK_SIDE_SEC = 0.5
 
@@ -246,25 +246,23 @@ class AgvAlignNode(Node):
         has_left_yaw = not math.isnan(lyaw)
         has_right_yaw = not math.isnan(ryaw)
 
-        if not has_left_yaw and not has_right_yaw:
-            self.last_good_err_yaw = None
-            # [변경] 마커가 둘 다 안 보이면 정지하지 않고, 보일 때까지
-            # 무제한으로 전진 pulse를 반복한다. (관측 거리가 짧게 설계돼
-            # 있어서, 안 보이는 주된 이유가 "너무 멀어서"인 경우가 실제로
-            # 있다고 판단 - 삐딱함/좌우이탈이면 markers가 아예 안 보이기보다
-            # 일부라도 보이는 경우가 많음)
-            if self._step_active and time.time() < self.cmd_until:
-                return
-            tw = Twist()
-            tw.linear.x = NO_MARKER_FORWARD_VX
-            self._start_pulse(
-                tw, NO_MARKER_FORWARD_SEC,
-                f'[정렬] L{level} 마커 둘 다 안 보임 → 전진 pulse(무제한 반복)'
-            )
+        # 펄스가 timer에서 완전히 종료 처리되기 전까지
+        # 모든 marker 입력을 무시한다.
+        if self._step_active:
             return
 
-        # 이미 펄스 중이면 새 값 무시 (이동 중 흔들림으로 값 튀는 것 방지)
-        if self._step_active and time.time() < self.cmd_until:
+        if not has_left_yaw and not has_right_yaw:
+            self.last_good_err_yaw = None
+            self.frontal_stable_count = 0
+        
+            # 마커가 둘 다 안 보이면 더 움직이지 않는다.
+            # 계속 전진하면 랙/박스에 박을 수 있음.
+            for _ in range(STOP_REPEAT):
+                self._align_pub.publish(Twist())
+        
+            self.get_logger().warn(
+                f'[정렬] L{level} 마커 둘 다 안 보임 → 정지, 정렬 보류'
+            )
             return
 
         yaw_errs = []
