@@ -807,7 +807,7 @@ class PickNode(Node):
                 self._log("[1F] 접은 진입 자세")
                 self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
                 if not self._wait_in_position(SAFE_ENTRY_1F_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                    self._log("[1F] 접은 진입 자세 도달 실패 - 재관측 요청"")
+                    self._log("[1F] 접은 진입 자세 도달 실패 - 재관측 요청")
                     self._pub_pick_status("pick_failed")
                     return
 
