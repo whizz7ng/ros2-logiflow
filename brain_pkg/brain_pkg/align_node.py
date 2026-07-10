@@ -83,7 +83,7 @@ NO_MARKER_FORWARD_VX = 0.08
 NO_MARKER_FORWARD_SEC = 0.35
 
 # 부호가 반대로 움직이면 아래만 바꿀 것.
-SIGN_Y = -1.0
+SIGN_Y = 1.0
 BLOCK_LEFT_SIGN  = -1.0   # block_left 요청 시 y 부호
 BLOCK_RIGHT_SIGN =  1.0   # block_right 요청 시 y 부호
 BLOCK_SIDE_VY = 0.08
