@@ -73,6 +73,11 @@ SHELF_ANGLES = {
 # 1층 접은 진입 자세 (J5 돌려서 랙 회피). 진입/탈출 공용.
 SAFE_ENTRY_1F_ANGLES = [8.17, -27.94, -129.37, 126.38, 54.31, -45.87]
 
+# 플레이스 전용 중간 관절 자세
+# HOME에서 place 좌표로 바로 send_coords하면 IK가 꼬일 수 있어서
+# 먼저 팔 모양을 안정적인 형태로 만들어준다.
+PLACE_READY_ANGLES = [0.0, 60.0, -120.0, 30.0, 0.0, -45.0]
+
 # 관측 자세 이동 후 정착 대기(초). 피드백 도달 확인의 타임아웃 기준으로 사용.
 OBSERVE_SETTLE_WAIT = 4.0
 
@@ -985,18 +990,28 @@ class PickNode(Node):
                 f"pre_place={[round(v,1) for v in pre_place]}"
             )
 
-            self._log("[PLACE 0/6] 홈 경유 후 플레이스 접근")
+            self._log("[PLACE 0/7] 홈 경유")
             self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
             if not self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
                 self._log("[PLACE] 홈 경유 실패 - 중단")
                 self._pub_pick_status("error")
                 return
             
-            self._log("[PLACE 1/6] 놓을 위치 위 waypoint 이동")
-            self.mc.send_coords(pre_place, MOVE_SPEED, 1)
-            if not self._wait_in_position(pre_place, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                self._log("[PLACE] waypoint 도달 실패 - 중단")
+            self._safe_sleep(0.5)
+            
+            self._log("[PLACE 1/7] place-ready 관절 waypoint 이동")
+            self.mc.send_angles(PLACE_READY_ANGLES, MOVE_SPEED)
+            if not self._wait_in_position(PLACE_READY_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
+                self._log("[PLACE] place-ready 도달 실패 - 중단")
                 self._pub_pick_status("error")
+                return
+            
+            self._safe_sleep(0.5)
+            
+            self._log("[PLACE 2/7] 놓을 위치 위 waypoint 이동")
+            self.mc.send_coords(pre_place, MOVE_SPEED, 1)
+            self._safe_sleep(3.0)
+            if self.emergency_active:
                 return
 
             self._log(f"[PLACE] 하강 좌표: {[round(v,1) for v in target]}")
