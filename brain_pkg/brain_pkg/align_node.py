@@ -67,7 +67,7 @@ FRONTAL_SETTLE_SEC = 0.8
 FRONTAL_STABLE_COUNT = 5
 
 # 부호가 반대로 돌면 여기만 -1.0으로
-SIGN_YAW = 1.0
+SIGN_YAW = -1.0
 YAW_OUTLIER_MAX_JUMP = 15.0   # deg, 실측 조정
 ALIGN_WZ = 0.41
 
@@ -288,7 +288,7 @@ class AgvAlignNode(Node):
                 )
         
             tw = Twist()
-            tw.angular.z = SIGN_YAW * self.no_marker_search_dir * NO_MARKER_SEARCH_WZ
+            tw.angular.z = self.no_marker_search_dir * NO_MARKER_SEARCH_WZ
         
             self.no_marker_search_count += 1
         
