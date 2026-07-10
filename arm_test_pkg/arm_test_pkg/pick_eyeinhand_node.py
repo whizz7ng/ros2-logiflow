@@ -870,7 +870,7 @@ class PickNode(Node):
                 # 8. 파지 성공 여부 확인
                 grip_result = self._check_gripped()
 
-                if grip_result is False:
+                if grip_result is not True:
                     self._log("[1F] 파지 실패 확정 - 안전 후퇴 후 재관측 요청")
 
                     self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
