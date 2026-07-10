@@ -85,7 +85,7 @@ OBSERVE_SETTLE_WAIT = 4.0
 GRIPPER_OPEN = 100
 GRIPPER_CLOSE = 30
 
-GRIP_SUCCESS_THRESH = 50   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
+GRIP_SUCCESS_THRESH = 45   # 그리퍼 값이 이 이상이면 블록 물림 (CLOSE=30, 널널하게 33)
 
 # =========================
 # 피킹 보정값
@@ -439,12 +439,27 @@ class PickNode(Node):
         hit_count = len(hit_vals)
     
         self.get_logger().info(
-            f"[GRIP CHECK] vals={[round(v, 1) for v in vals]}, "
-            f"hit_count={hit_count}/{READ_TRIES}, "
-            f"success_thresh>={GRIP_SUCCESS_THRESH}, "
-            f"required_hits={REQUIRED_HITS}"
+            f"[GRIP CHECK] 전체 raw vals = {[round(v, 1) for v in vals]}"
         )
-    
+        
+        self.get_logger().info(
+            f"[GRIP CHECK] 성공 후보 vals(>= {GRIP_SUCCESS_THRESH}) = "
+            f"{[round(v, 1) for v in hit_vals]}"
+        )
+        
+        self.get_logger().info(
+            f"[GRIP CHECK] hit_count={hit_count}/{READ_TRIES}, "
+            f"required_hits={REQUIRED_HITS}, "
+            f"threshold>={GRIP_SUCCESS_THRESH}"
+        )
+        
+        gripped = hit_count >= REQUIRED_HITS
+        
+        self.get_logger().info(
+            f"[GRIP CHECK] 최종 판정 = {'물림 TRUE' if gripped else '빈손 FALSE'} "
+            f"(hit_count={hit_count}, required={REQUIRED_HITS})"
+        )
+            
         gripped = hit_count >= REQUIRED_HITS
     
         self.get_logger().info(
