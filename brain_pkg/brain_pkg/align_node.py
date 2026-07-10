@@ -83,6 +83,11 @@ BLOCK_FORWARD_SEC = 0.35
 NO_MARKER_FORWARD_VX = 0.08
 NO_MARKER_FORWARD_SEC = 0.35
 
+# ===== [마커 미검출 시 회전 탐색] =====
+NO_MARKER_SEARCH_WZ = 0.25       # 제자리 회전 속도
+NO_MARKER_SEARCH_SEC = 0.25      # 한 번 회전 시간
+NO_MARKER_SEARCH_MAX = 8         # 같은 방향 최대 탐색 횟수
+
 # 부호가 반대로 움직이면 아래만 바꿀 것.
 SIGN_Y = 1.0
 BLOCK_LEFT_SIGN  =  1.0   # block_left 요청 시 y 부호
@@ -122,6 +127,10 @@ class AgvAlignNode(Node):
         self.frontal_stable_count = 0
         self.active_pulse_kind = None
         self.last_good_err_yaw = None
+
+        # 마커가 안 보일 때 좌우 회전 탐색용
+        self.no_marker_search_count = 0
+        self.no_marker_search_dir = 1.0
       
         # ===== [펄스 이동 상태] =====
         self.active_cmd = Twist()
@@ -161,6 +170,14 @@ class AgvAlignNode(Node):
             self.frontal_stable_count = 0
             self.get_logger().info(
                 f'[정렬] yaw pulse 종료 → {FRONTAL_SETTLE_SEC:.1f}s 안정화 대기'
+            )
+            return
+          
+        if finished_kind == "marker_search":
+            self.frontal_settle_until = time.time() + FRONTAL_SETTLE_SEC
+            self.frontal_stable_count = 0
+            self.get_logger().info(
+                f'[정렬] marker search pulse 종료 → {FRONTAL_SETTLE_SEC:.1f}s 안정화 대기'
             )
             return
         
@@ -251,17 +268,35 @@ class AgvAlignNode(Node):
         if self._step_active:
             return
 
+        # 마커가 하나라도 보이면 탐색 상태 초기화
+        if has_left_yaw or has_right_yaw:
+            self.no_marker_search_count = 0
+
         if not has_left_yaw and not has_right_yaw:
             self.last_good_err_yaw = None
             self.frontal_stable_count = 0
         
-            # 마커가 둘 다 안 보이면 더 움직이지 않는다.
-            # 계속 전진하면 랙/박스에 박을 수 있음.
-            for _ in range(STOP_REPEAT):
-                self._align_pub.publish(Twist())
+            # 일정 횟수마다 탐색 방향을 반대로 바꾼다.
+            # 예: 오른쪽으로 8번 훑어도 못 찾으면 왼쪽으로 훑기.
+            if self.no_marker_search_count >= NO_MARKER_SEARCH_MAX:
+                self.no_marker_search_count = 0
+                self.no_marker_search_dir *= -1.0
+                self.get_logger().warn(
+                    f'[정렬] 마커 미검출 지속 → 탐색 방향 반전 dir={self.no_marker_search_dir:+.0f}'
+                )
         
-            self.get_logger().warn(
-                f'[정렬] L{level} 마커 둘 다 안 보임 → 정지, 정렬 보류'
+            tw = Twist()
+            tw.angular.z = self.no_marker_search_dir * NO_MARKER_SEARCH_WZ
+        
+            self.no_marker_search_count += 1
+        
+            self._start_pulse(
+                tw,
+                NO_MARKER_SEARCH_SEC,
+                f'[정렬] L{level} 마커 둘 다 안 보임 '
+                f'→ 제자리 회전 탐색 {self.no_marker_search_count}/{NO_MARKER_SEARCH_MAX} '
+                f'dir={self.no_marker_search_dir:+.0f}',
+                kind="marker_search"
             )
             return
 
