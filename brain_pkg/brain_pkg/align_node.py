@@ -56,7 +56,7 @@ YAW_TARGET = {
 }
 
 # 정면정렬 허용 오차(deg) / 회전 게인(부호 판단용) / 펄스 시간
-TOL_YAW_FRONTAL = 5.0
+TOL_YAW_FRONTAL = 10.0
 GAIN_YAW_FRONTAL = 0.01
 PULSE_YAW_FRONTAL_SEC = 0.35
 
@@ -64,7 +64,7 @@ PULSE_YAW_FRONTAL_SEC = 0.35
 FRONTAL_SETTLE_SEC = 0.8
 
 # yaw가 허용오차 안에 연속으로 몇 번 들어와야 aligned로 볼지
-FRONTAL_STABLE_COUNT = 5
+FRONTAL_STABLE_COUNT = 2
 
 # 부호가 반대로 돌면 여기만 -1.0으로
 SIGN_YAW = -1.0
@@ -96,7 +96,7 @@ BLOCK_SIDE_SEC = 0.5
 
 # QR place 전용 전진 pulse (기존 그대로)
 QR_FORWARD_VX = 0.08
-QR_FORWARD_SEC = 0.35
+QR_FORWARD_SEC = 0.41
 
 STOP_REPEAT = 3
 CMD_HZ = 20
