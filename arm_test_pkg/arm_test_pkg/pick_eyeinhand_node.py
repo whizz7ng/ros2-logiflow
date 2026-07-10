@@ -1040,9 +1040,16 @@ class PickNode(Node):
 
             self._log("[PLACE 3/7] z축 수직 하강")
             self.mc.send_coords(target, DESCEND_SPEED, 1)
-            if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                self._log("[PLACE] 하강 도달 실패 - 중단")
-                self._pub_pick_status("error")
+            if not self._wait_in_position(place_down, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+                self._log("[PLACE] 하강 도달 실패 - 그래도 현재 위치에서 그리퍼 열고 place 처리")
+            
+                try:
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.5)
+                except Exception as e:
+                    self.get_logger().warn(f"[PLACE] 강제 그리퍼 열기 실패: {e}")
+            
+                self._pub_pick_status("placing_done")
                 return
 
             # self._log("[PLACE 3/7] z축 수직 하강")
