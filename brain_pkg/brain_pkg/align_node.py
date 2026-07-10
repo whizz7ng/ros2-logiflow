@@ -60,6 +60,12 @@ TOL_YAW_FRONTAL = 5.0
 GAIN_YAW_FRONTAL = 0.01
 PULSE_YAW_FRONTAL_SEC = 0.35
 
+# 정면정렬 pulse 이후 안정화 시간
+FRONTAL_SETTLE_SEC = 0.8
+
+# yaw가 허용오차 안에 연속으로 몇 번 들어와야 aligned로 볼지
+FRONTAL_STABLE_COUNT = 5
+
 # 부호가 반대로 돌면 여기만 -1.0으로
 SIGN_YAW = 1.0
 ALIGN_WZ = 0.41
@@ -111,6 +117,10 @@ class AgvAlignNode(Node):
         self._frontal_stop_sent = 0
         self.brain_state = 'IDLE'
 
+        self.frontal_settle_until = 0.0
+        self.frontal_stable_count = 0
+        self.active_pulse_kind = None
+      
         # ===== [펄스 이동 상태] =====
         self.active_cmd = Twist()
         self.cmd_until = 0.0
@@ -135,20 +145,35 @@ class AgvAlignNode(Node):
 
         for _ in range(STOP_REPEAT):
             self._align_pub.publish(Twist())
-
+        
+        finished_kind = self.active_pulse_kind
+        
         self._step_active = False
         self._step_done_sent = True
-
+        self.active_pulse_kind = None
+        
+        # 정면 yaw 회전 pulse는 step_done을 brain에 보내지 말고,
+        # 먼저 안정화 시간을 둔 뒤 marker_callback에서 aligned 여부를 판단하게 한다.
+        if finished_kind == "frontal_yaw":
+            self.frontal_settle_until = time.time() + FRONTAL_SETTLE_SEC
+            self.frontal_stable_count = 0
+            self.get_logger().info(
+                f'[정렬] yaw pulse 종료 → {FRONTAL_SETTLE_SEC:.1f}s 안정화 대기'
+            )
+            return
+        
         msg = String()
         msg.data = 'step_done'
         self._align_status_pub.publish(msg)
         self.get_logger().info('/align_status 발행: step_done')
 
-    def _start_pulse(self, tw: Twist, pulse_sec: float, log_msg: str):
+    def _start_pulse(self, tw: Twist, pulse_sec: float, log_msg: str, kind: str = "step"):
         self.active_cmd = tw
         self.cmd_until = time.time() + pulse_sec
         self._step_active = True
         self._step_done_sent = False
+        self.active_pulse_kind = kind
+    
         self.get_logger().info(
             f'{log_msg} → pulse cmd(vx={tw.linear.x:.3f} vy={tw.linear.y:.3f} '
             f'wz={tw.angular.z:.3f}) for {pulse_sec:.2f}s'
@@ -246,6 +271,16 @@ class AgvAlignNode(Node):
             yaw_errs.append(ryaw - yaw_tgt[MARKER_ID_RIGHT])
         err_yaw_frontal = sum(yaw_errs) / len(yaw_errs)
 
+        now = time.time()
+
+        # yaw pulse 직후에는 차체가 아직 흔들릴 수 있으므로 aligned 판정 금지
+        if now < self.frontal_settle_until:
+            remain = self.frontal_settle_until - now
+            self.get_logger().info(
+                f'[정렬] 안정화 대기 중 {remain:.2f}s - yaw 판정 보류'
+            )
+            return
+
         if abs(err_yaw_frontal) >= TOL_YAW_FRONTAL:
             self._frontal_stop_sent = 0
             tw = Twist()
@@ -255,24 +290,38 @@ class AgvAlignNode(Node):
             else:
                 tw.angular.z = -SIGN_YAW * ALIGN_WZ
 
+            self.frontal_stable_count = 0
+
             self._start_pulse(
                 tw, PULSE_YAW_FRONTAL_SEC,
-                f'[정렬] L{level} 정면정렬 err_yaw={err_yaw_frontal:.1f} (n={len(yaw_errs)})'
+                f'[정렬] L{level} 정면정렬 err_yaw={err_yaw_frontal:.1f} (n={len(yaw_errs)})',
+                kind="frontal_yaw"
             )
             return
 
-        # ===== 정면정렬 완료 =====
-        if self._frontal_stop_sent < STOP_REPEAT:
-            self._publish_stop()
-            self._frontal_stop_sent += 1
-            self.get_logger().info(
-                f'[정렬] L{level} 정면정렬 완료 (err_yaw={err_yaw_frontal:.1f}) - 정지'
-            )
+        # ===== 정면정렬 완료 후보 =====
+        self.frontal_stable_count += 1
 
+        self.get_logger().info(
+            f'[정렬] L{level} yaw 안정 후보 '
+            f'err_yaw={err_yaw_frontal:.1f}, '
+            f'stable={self.frontal_stable_count}/{FRONTAL_STABLE_COUNT}'
+        )
+        
+        if self.frontal_stable_count < FRONTAL_STABLE_COUNT:
+            return
+        
+        # 연속으로 충분히 안정됐을 때만 aligned 발행
+        for _ in range(STOP_REPEAT):
+            self._align_pub.publish(Twist())
+        
         msg_out = String()
         msg_out.data = 'aligned'
         self._align_status_pub.publish(msg_out)
-        self.get_logger().info('/align_status 발행: aligned (정면정렬 완료)')
+        self.get_logger().info('/align_status 발행: aligned (정면정렬 안정 완료)')
+        
+        self.frontal_stable_count = 0
+        self._frontal_stop_sent = 0
 
     def _publish_stop(self):
         self.active_cmd = Twist()
