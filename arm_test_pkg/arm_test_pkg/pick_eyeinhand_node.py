@@ -931,6 +931,24 @@ class PickNode(Node):
                 if not self._wait_in_position(back_1f, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                     self._log("[1F] 후퇴 도달 실패 - 홈 복귀만 시도")
 
+                # 8-1. 후퇴 후 파지 재확인
+                self._log("[1F] 후퇴 후 파지 재확인")
+                grip_result_after_back = self._check_gripped()
+                
+                if grip_result_after_back is not True:
+                    self._log("[1F] 후퇴 중 블록 이탈 감지 → pick_failed 발행")
+                
+                    # 혹시 물체가 애매하게 걸려 있으면 열고 홈 복귀
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
+                
+                    self._log("[1F FAIL-AFTER-BACK] 홈 복귀")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                
+                    self._pub_pick_status("pick_failed")
+                    return
+
                 # 9. 홈 복귀
                 self._log("[1F] 홈 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
@@ -1021,6 +1039,23 @@ class PickNode(Node):
                 self.mc.send_coords(back, MOVE_SPEED, 1)
                 if not self._wait_in_position(back, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                     self._log("[2F] 후퇴 도달 실패 - 계속 진행")
+
+                # 2-1. 후퇴 후 파지 재확인
+                self._log("[2F] 후퇴 후 파지 재확인")
+                grip_result_after_back = self._check_gripped()
+                
+                if grip_result_after_back is not True:
+                    self._log("[2F] 후퇴 중 블록 이탈 감지 → pick_failed 발행")
+                
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
+                
+                    self._log("[2F FAIL-AFTER-BACK] 홈 복귀")
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                
+                    self._pub_pick_status("pick_failed")
+                    return
 
                 # 3. 홈
                 self._log("[2F] 홈 복귀")
