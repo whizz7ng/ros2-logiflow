@@ -100,6 +100,10 @@ class BrainNode(Node):
         self.place_retry_count = 0
         self.PLACE_RETRY_MAX = 3
 
+        # placed 발행 후 dashboard가 다음 /order_request를 보낼 시간을 잠깐 기다림
+        self.parking_timer = None
+        self.PARKING_GRACE_SEC = 3.0
+
         # True일 때만 /align_status step_done을 처리한다 (VISION/PLACE_VISION 단계용).
         self.waiting_align_step = False
 
@@ -206,12 +210,63 @@ class BrainNode(Node):
                 f'남은 주문 있음: {len(self.order_queue)}개 -> 다음 주문 시작'
             )
             self._start_next_order()
+        # else:
+        #     self.get_logger().info('남은 주문 없음 -> 주차 복귀 명령 발행')
+        #     self.state = 'GO_PARKING'
+        #     self._pub_state()
+        #     self._go_parking_pub.publish(Empty())
+        #     self.get_logger().info('/go_parking 발행: Empty')
+
         else:
-            self.get_logger().info('남은 주문 없음 -> 주차 복귀 명령 발행')
-            self.state = 'GO_PARKING'
+            self.get_logger().info(
+                f'남은 주문 없음 -> {self.PARKING_GRACE_SEC:.1f}s 동안 추가 주문 대기 후 주차 판단'
+            )
+        
+            self.state = 'WAIT_NEXT_ORDER'
             self._pub_state()
-            self._go_parking_pub.publish(Empty())
-            self.get_logger().info('/go_parking 발행: Empty')
+        
+            if self.parking_timer is not None:
+                self.parking_timer.cancel()
+                self.parking_timer = None
+        
+            self.parking_timer = self.create_timer(
+                self.PARKING_GRACE_SEC,
+                self._parking_grace_timeout
+            )
+
+    def _parking_grace_timeout(self):
+        """
+        placed 발행 후 dashboard가 다음 /order_request를 보낼 시간을 잠깐 기다린다.
+        그 사이 주문이 들어오면 바로 다음 주문 시작.
+        끝까지 안 들어오면 그때 /go_parking 발행.
+        """
+        if self.parking_timer is not None:
+            self.parking_timer.cancel()
+            self.parking_timer = None
+    
+        if self.emergency_active:
+            self.get_logger().warn('비상정지 상태라 주차 판단 중단')
+            return
+    
+        if self.state != 'WAIT_NEXT_ORDER':
+            self.get_logger().warn(
+                f'주차 유예 타이머 만료됐지만 현재 상태가 WAIT_NEXT_ORDER 아님: {self.state}'
+            )
+            return
+    
+        if self.order_queue:
+            self.get_logger().info(
+                f'주차 유예 중 주문 수신됨: {len(self.order_queue)}개 -> 바로 다음 주문 시작'
+            )
+            self._start_next_order()
+            return
+    
+        self.get_logger().info('주차 유예 후에도 주문 없음 -> 주차 복귀 명령 발행')
+        self.state = 'GO_PARKING'
+        self._pub_state()
+        self._go_parking_pub.publish(Empty())
+        self.get_logger().info('/go_parking 발행: Empty')    
+          
 
     # ============================================================
     # Callbacks
@@ -231,7 +286,18 @@ class BrainNode(Node):
                 f"[KPI TIME] cycle_start order={self.order_start_order}"
             )
 
-        if self.state == 'IDLE':
+        # if self.state == 'IDLE':
+        #     self._start_next_order()
+        # else:
+        #     self.get_logger().info(
+        #         f'현재 {self.state} 상태라 주문 큐에 저장. '
+        #         f'대기 주문 수: {len(self.order_queue)}'
+        #     )
+        if self.state in ('IDLE', 'WAIT_NEXT_ORDER'):
+            if self.parking_timer is not None:
+                self.parking_timer.cancel()
+                self.parking_timer = None
+        
             self._start_next_order()
         else:
             self.get_logger().info(
