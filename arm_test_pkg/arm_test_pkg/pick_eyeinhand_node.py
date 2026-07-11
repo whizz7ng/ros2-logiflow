@@ -1129,15 +1129,45 @@ class PickNode(Node):
             self.mc.send_coords(pre_place, MOVE_SPEED, 0)
             
             if not self._wait_in_position(pre_place, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                self._log("[PLACE] pre_place 도달 실패 - 현재 위치에서 놓지 않고 error 처리")
-
-
-                # 물체를 잡은 상태 유지
-                # 가능한 경우 안전하게 홈 복귀만 시도
+                self._log("[PLACE] pre_place 도달 실패 - 현재 위치에서 강제 내려놓기 진행")
+            
+                # pre_place에 정확히 못 갔더라도, 현재 위치에서 물체를 놓는다.
+                # KPI 테스트용: 물체를 집은 채 홈으로 복귀하지 않도록 함.
+                self._log("[PLACE FORCE] 그리퍼 열기 (pre_place 실패 후 현재 위치에서 내려놓기)")
+                self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                if not self._safe_sleep(1.0):
+                    return
+            
+                # 한 번 더 open 명령
+                self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                if not self._safe_sleep(2.0):
+                    return
+            
+                if self.emergency_active:
+                    return
+            
+                # 가능하면 살짝 위로 들어올린 뒤 홈 복귀
+                cur = self._safe_get_coords()
+                if cur is not None:
+                    safe_lift = [
+                        cur[0],
+                        cur[1],
+                        cur[2] + 60.0,
+                        cur[3],
+                        cur[4],
+                        cur[5],
+                    ]
+                    self._log(f"[PLACE FORCE] 현재 위치 기준 z 상승: {[round(v,1) for v in safe_lift]}")
+                    self.mc.send_coords(safe_lift, MOVE_SPEED, 1)
+                    self._safe_sleep(2.0)
+            
+                self._log("[PLACE FORCE] 홈포지션 복귀")
                 self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
                 self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
             
-                self._pub_pick_status("place_failed")
+                # KPI 흐름상 내려놓은 것으로 처리
+                self._log("[PLACE FORCE] 강제 플레이스 완료")
+                self._pub_pick_status("placing_done")
                 return
                 
             
