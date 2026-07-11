@@ -803,25 +803,25 @@ class PickNode(Node):
                 if self.emergency_active:
                     return
 
-                # 1. J5 편 진입 자세로 바로 이동
-                self._log("[1F] J5 편 진입 자세로 바로 이동")
-                unfold = list(SAFE_ENTRY_1F_ANGLES)
-                unfold[4] = 0.0
+                # # 1. J5 편 진입 자세로 바로 이동
+                # self._log("[1F] J5 편 진입 자세로 바로 이동")
+                # unfold = list(SAFE_ENTRY_1F_ANGLES)
+                # unfold[4] = 0.0
                 
-                self.mc.send_angles(unfold, MOVE_SPEED)
-                if not self._wait_in_position(unfold, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                    self._log("[1F] J5 편 진입 자세 도달 실패 - 재관측 요청")
-                    self._pub_pick_status("pick_failed")
-                    return
+                # self.mc.send_angles(unfold, MOVE_SPEED)
+                # if not self._wait_in_position(unfold, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
+                #     self._log("[1F] J5 편 진입 자세 도달 실패 - 재관측 요청")
+                #     self._pub_pick_status("pick_failed")
+                #     return
                 
-                # 2. 현재 자세 읽기
-                cur = self._safe_get_coords()
-                if cur is None:
-                    self._log("[1F] get_coords 실패 - 안전상 중단")
-                    self._pub_pick_status("pick_failed")
-                    return
+                # # 2. 현재 자세 읽기
+                # cur = self._safe_get_coords()
+                # if cur is None:
+                #     self._log("[1F] get_coords 실패 - 안전상 중단")
+                #     self._pub_pick_status("pick_failed")
+                #     return
                 
-                self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
+                # self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
                 
                 # 3. y축 이동 - 블록 y로 정렬
                 # x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
