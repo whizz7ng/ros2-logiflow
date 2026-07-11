@@ -803,63 +803,63 @@ class PickNode(Node):
                 if self.emergency_active:
                     return
 
-                # # 1. J5 편 진입 자세로 바로 이동
-                # self._log("[1F] J5 편 진입 자세로 바로 이동")
-                # unfold = list(SAFE_ENTRY_1F_ANGLES)
-                # unfold[4] = 0.0
+                # 1. J5 편 진입 자세로 바로 이동
+                self._log("[1F] J5 편 진입 자세로 바로 이동")
+                unfold = list(SAFE_ENTRY_1F_ANGLES)
+                unfold[4] = 0.0
                 
-                # self.mc.send_angles(unfold, MOVE_SPEED)
-                # if not self._wait_in_position(unfold, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                #     self._log("[1F] J5 편 진입 자세 도달 실패 - 재관측 요청")
-                #     self._pub_pick_status("pick_failed")
-                #     return
+                self.mc.send_angles(unfold, MOVE_SPEED)
+                if not self._wait_in_position(unfold, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
+                    self._log("[1F] J5 편 진입 자세 도달 실패 - 재관측 요청")
+                    self._pub_pick_status("pick_failed")
+                    return
                 
-                # # 2. 현재 자세 읽기
-                # cur = self._safe_get_coords()
-                # if cur is None:
-                #     self._log("[1F] get_coords 실패 - 안전상 중단")
-                #     self._pub_pick_status("pick_failed")
-                #     return
+                # 2. 현재 자세 읽기
+                cur = self._safe_get_coords()
+                if cur is None:
+                    self._log("[1F] get_coords 실패 - 안전상 중단")
+                    self._pub_pick_status("pick_failed")
+                    return
                 
-                # self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
+                self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
                 
-                # 3. y축 이동 - 블록 y로 정렬
-                # x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
-                # y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
-                # self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
-                # self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                3. y축 이동 - 블록 y로 정렬
+                x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
+                y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
+                self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
+                self.mc.send_coords(y_move, MOVE_SPEED, 0)
                 
-                # if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                #     self._log("[1F] y축 이동 도달 실패 - 재관측 요청")
+                if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+                    self._log("[1F] y축 이동 도달 실패 - 재관측 요청")
                 
-                #     self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
-                #     self._wait_gripper_settled(timeout=1.0)
+                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                    self._wait_gripper_settled(timeout=1.0)
                 
-                #     self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
-                #     self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
                 
-                #     self._pub_pick_status("pick_failed")
-                #     return
+                    self._pub_pick_status("pick_failed")
+                    return
                 
-                # 4. y축 이동 - 블록 y로 정렬
-                # 너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
-                # 현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
-                # Y_ALIGN_CLEARANCE_Z_1F = 30.0
+                4. y축 이동 - 블록 y로 정렬
+                너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
+                현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
+                Y_ALIGN_CLEARANCE_Z_1F = 30.0
                 
-                # safe_y_z = max(cur[2], z + Y_ALIGN_CLEARANCE_Z_1F)
+                safe_y_z = max(cur[2], z + Y_ALIGN_CLEARANCE_Z_1F)
                 
-                # y_move = [cur[0], y, safe_y_z, rx, ry, rz]
-                # self._log(f"[1F] y축 이동 (안전 높이 정렬): {[round(v,1) for v in y_move]}")
-                # self.mc.send_coords(y_move, MOVE_SPEED, 0)
-                # if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                #     self._log("[1F] y축 이동 도달 실패 - 중단")
-                #     self._pub_pick_status("error")
-                #     return
+                y_move = [cur[0], y, safe_y_z, rx, ry, rz]
+                self._log(f"[1F] y축 이동 (안전 높이 정렬): {[round(v,1) for v in y_move]}")
+                self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+                    self._log("[1F] y축 이동 도달 실패 - 중단")
+                    self._pub_pick_status("error")
+                    return
 
-                # self.mc.send_coords(y_move, MOVE_SPEED, 0)
-                # self._safe_sleep(2.0)
-                # if self.emergency_active:
-                #     return
+                self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                self._safe_sleep(2.0)
+                if self.emergency_active:
+                    return
 
                 
 
@@ -867,7 +867,7 @@ class PickNode(Node):
                 FORWARD_Y_COMP = 0.0
                 target = [x, y + FORWARD_Y_COMP, z, rx, ry, rz]
                 self._log(f"[1F] 수평 전진 파지: {[round(v,1) for v in target]}")
-                self.mc.send_coords(target, DESCEND_SPEED, 0)
+                self.mc.send_coords(target, DESCEND_SPEED, 1)
                 if not self._wait_in_position(target, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                     self._log("[1F] 전진 파지 도달 실패 - 재관측 요청")
                 
