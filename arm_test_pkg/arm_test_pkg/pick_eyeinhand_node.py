@@ -978,7 +978,7 @@ class PickNode(Node):
                 FORWARD_Y_COMP_2F = 0.0
                 fwd = [x, y + FORWARD_Y_COMP_2F, target_z, rx, ry, rz]
                 self._log(f"[2F] 전진 파지: {[round(v,1) for v in fwd]}")
-                self.mc.send_coords(fwd, DESCEND_SPEED, 1)   # 직선 전진
+                self.mc.send_coords(fwd, DESCEND_SPEED, 0)   # 직선 전진
                 if not self._wait_in_position(fwd, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                     self._log("[2F] 전진 파지 도달 실패 - 재관측 요청")
                 
