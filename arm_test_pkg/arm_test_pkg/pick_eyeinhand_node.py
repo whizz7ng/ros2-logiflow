@@ -825,21 +825,21 @@ class PickNode(Node):
                 
                 # 3. y축 이동 - 블록 y로 정렬
                 # x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
-                y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
-                self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
-                self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                # y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
+                # self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
+                # self.mc.send_coords(y_move, MOVE_SPEED, 0)
                 
-                if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
-                    self._log("[1F] y축 이동 도달 실패 - 재관측 요청")
+                # if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
+                #     self._log("[1F] y축 이동 도달 실패 - 재관측 요청")
                 
-                    self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
-                    self._wait_gripper_settled(timeout=1.0)
+                #     self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
+                #     self._wait_gripper_settled(timeout=1.0)
                 
-                    self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
-                    self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
+                #     self.mc.send_angles(HOME_ANGLES, MOVE_SPEED)
+                #     self._wait_in_position(HOME_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT)
                 
-                    self._pub_pick_status("pick_failed")
-                    return
+                #     self._pub_pick_status("pick_failed")
+                #     return
                 
                 # 4. y축 이동 - 블록 y로 정렬
                 # 너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
