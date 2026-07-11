@@ -95,7 +95,7 @@ BLOCK_SIDE_VY = 0.08
 BLOCK_SIDE_SEC = 0.8
 
 # QR place 전용 전진 pulse (기존 그대로)
-QR_FORWARD_VX = 0.07
+QR_FORWARD_VX = 0.65
 QR_FORWARD_SEC = 0.41
 
 STOP_REPEAT = 3
