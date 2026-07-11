@@ -823,7 +823,7 @@ class PickNode(Node):
                 
                 self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
                 
-                3. y축 이동 - 블록 y로 정렬
+                #3. y축 이동 - 블록 y로 정렬
                 #x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
                 y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
                 self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
