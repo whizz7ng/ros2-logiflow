@@ -1177,6 +1177,11 @@ class PickNode(Node):
             self._log("[PLACE 4/7] 그리퍼 열기 (내려놓기)")
             self.mc.set_gripper_value(GRIPPER_OPEN, GRIPPER_SPEED)
             self._wait_gripper_settled(timeout=2.0)
+            
+            # place에서는 실제로 떨어질 시간을 확실히 줌
+            if not self._safe_sleep(2.0):
+                return
+            
             if self.emergency_active:
                 return
 
