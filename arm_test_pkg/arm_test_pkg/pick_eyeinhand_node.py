@@ -824,7 +824,7 @@ class PickNode(Node):
                 self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
                 
                 3. y축 이동 - 블록 y로 정렬
-                x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
+                #x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
                 y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
                 self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
                 self.mc.send_coords(y_move, MOVE_SPEED, 0)
@@ -842,8 +842,8 @@ class PickNode(Node):
                     return
                 
                 4. y축 이동 - 블록 y로 정렬
-                너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
-                현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
+                # 너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
+                # 현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
                 Y_ALIGN_CLEARANCE_Z_1F = 30.0
                 
                 safe_y_z = max(cur[2], z + Y_ALIGN_CLEARANCE_Z_1F)
