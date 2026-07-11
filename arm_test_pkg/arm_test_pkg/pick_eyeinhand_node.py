@@ -803,36 +803,32 @@ class PickNode(Node):
                 if self.emergency_active:
                     return
 
-                # 1. 접은 진입 (랙 회피)
-                self._log("[1F] 접은 진입 자세")
-                self.mc.send_angles(SAFE_ENTRY_1F_ANGLES, MOVE_SPEED)
-                if not self._wait_in_position(SAFE_ENTRY_1F_ANGLES, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                    self._log("[1F] 접은 진입 자세 도달 실패 - 재관측 요청")
-                    self._pub_pick_status("pick_failed")
-                    return
-
-                # 2. J5 펴기 (접힘 해제 → 파지 좋은 관절 상태)
-                self._log("[1F] J5 펴기")
+                # 1. J5 편 진입 자세로 바로 이동
+                self._log("[1F] J5 편 진입 자세로 바로 이동")
                 unfold = list(SAFE_ENTRY_1F_ANGLES)
-                unfold[4] = 0
+                unfold[4] = 0.0
+                
                 self.mc.send_angles(unfold, MOVE_SPEED)
                 if not self._wait_in_position(unfold, mode=0, timeout=WAIT_ANGLES_TIMEOUT):
-                    self._log("[1F] J5 펴기 도달 실패 - 중단")
+                    self._log("[1F] J5 편 진입 자세 도달 실패 - 재관측 요청")
                     self._pub_pick_status("pick_failed")
                     return
-
-                # 3. 현재 자세 읽기 (J5 편 상태의 좌표)
+                
+                # 2. 현재 자세 읽기
                 cur = self._safe_get_coords()
                 if cur is None:
                     self._log("[1F] get_coords 실패 - 안전상 중단")
                     self._pub_pick_status("pick_failed")
                     return
+                
                 self._log(f"[1F] J5 편 현재 자세: {[round(v,1) for v in cur]}")
-
-                # 4. y축 이동 - 블록 y로 정렬 (현재 x,z 유지, y만 블록으로)
+                
+                # 3. y축 이동 - 블록 y로 정렬
+                # x는 현재 편 자세의 x 유지, z는 살짝 띄우고, rpy는 파지 자세로 준비
                 y_move = [cur[0], y, cur[2] + 5, rx, ry, rz]
                 self._log(f"[1F] y축 이동 (블록 앞 정렬): {[round(v,1) for v in y_move]}")
-                self.mc.send_coords(y_move, MOVE_SPEED, 0)   # 직선
+                self.mc.send_coords(y_move, MOVE_SPEED, 0)
+                
                 if not self._wait_in_position(y_move, mode=1, timeout=WAIT_COORDS_TIMEOUT):
                     self._log("[1F] y축 이동 도달 실패 - 재관측 요청")
                 
@@ -844,7 +840,7 @@ class PickNode(Node):
                 
                     self._pub_pick_status("pick_failed")
                     return
-
+                
                 # 4. y축 이동 - 블록 y로 정렬
                 # 너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
                 # 현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
