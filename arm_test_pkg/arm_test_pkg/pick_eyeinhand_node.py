@@ -841,7 +841,7 @@ class PickNode(Node):
                     self._pub_pick_status("pick_failed")
                     return
                 
-                4. y축 이동 - 블록 y로 정렬
+                #4. y축 이동 - 블록 y로 정렬
                 # 너무 낮은 높이에서 옆으로 움직이면 블록/바닥/랙과 간섭 위험이 있어서
                 # 현재 z와 목표 z+여유높이 중 더 높은 값을 사용한다.
                 Y_ALIGN_CLEARANCE_Z_1F = 30.0
