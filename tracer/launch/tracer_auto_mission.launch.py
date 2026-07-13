@@ -20,7 +20,7 @@ def generate_launch_description():
       - myAGV built-in camera
       - aruco_align_node
       - primitive_route_runner + nav_debug_logger
-      - mission_brain_node
+      - mission_brain_node (emergency_stop / go_home / idle)
       - agv_align_bridge_node
 
     After this stack is up, Orin brain_node can start a mission by publishing:
@@ -125,21 +125,53 @@ def generate_launch_description():
             #   min_control_side_px ~= 60
             #
             # 320x180에서는 거의 절반으로 스케일링.
-            'done_required_count': '2',
-            'center_tolerance_px': '35.0',
-            'min_control_side_px': '30.0',
+            'done_required_count': '3',
+            'center_tolerance_px': '30.0',
+            'min_control_side_px': '17.0',
+            # lateral align
+            'kp_vy': '0.00022',
+            'max_vy': '0.025',
+            'min_vy': '0.014',
+
+            # forward align
+            'kp_vx': '0.00100',
+            'max_vx': '0.035',
+            'min_vx': '0.016',
+
+
+            # ====================================================
+            # Rough front/yaw alignment using marker skew
+            # ====================================================
+            # 정밀 solvePnP 없이 ArUco 사각형의 좌/우 변 길이 차이로
+            # 대략 정면 여부를 판단하고 angular.z를 살짝 낸다.
+            'enable_front_align': 'true',
+            'front_align_only_when_center_ok': 'true',
+
+            # front_ok 판단 기준
+            'front_skew_tol': '0.06',
+            'front_lr_ratio_max': '1.15',
+            'front_tb_ratio_max': '1.20',
+            'front_angle_tol_deg': '10.0',
+
+            # wz control
+            'kp_wz': '0.45',
+            'max_wz': '0.10',
+            'min_wz': '0.035',
+            'invert_wz': 'false',
 
             # frame-cut / lost-marker recovery
             'enable_lost_recovery': 'true',
-            'lost_recovery_start_sec': '0.15',
-            'lost_recovery_sec': '2.50',
-            'lost_recovery_vy': '0.015',
+            'lost_recovery_start_sec': '0.45',
+            'lost_recovery_sec': '1.50',
+            'lost_recovery_vy': '0.010',
             'lost_recovery_min_err_px': '10.0',
-            'lost_recovery_max_age_sec': '5.0',
+            'lost_recovery_max_age_sec': '3.0',
             'lost_timeout_sec': '2.5',
 
+            'marker_smoothing_alpha': '0.55',
+
             # debug load reduction
-            'publish_debug_image': 'false',
+            'publish_debug_image': 'true',
             'publish_debug_json': 'true',
         }.items()
     )
@@ -176,10 +208,28 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
-            'order_request_topic': '/order_request',
+            'order_request_topic': '/order_request_unused',
             'place_target_topic': '/place_target',
             'arm_status_topic': '/arm_status',
             'go_parking_topic': '/go_parking',
+
+            # External safety commands. Any String payload triggers.
+            'emergency_stop_topic': '/emergency_stop',
+            'emergency_reset_topic': '/retry_pick',
+            'go_home_topic': '/go_home',
+            'go_home_release_topic': '/go_home_release',
+            'idle_topic': '/idle',
+            'odom_topic': '/odometry/filtered',
+            'parking_goal_name': 'parking_region',
+
+            # Stop confirmation before IDLE / direct parking.
+            'stop_confirm_vx': '0.02',
+            'stop_confirm_vy': '0.02',
+            'stop_confirm_wz': '0.05',
+            'stop_confirm_count': '3',
+            'stop_confirm_max_wait_sec': '1.0',
+            'stop_odom_timeout_sec': '0.30',
+
             'auto_switch_aruco_target': 'true',
 
             # /stop_obj, /stop_qr 이후 외부 brain_node의 /agv_align을 허용하기 위한 enable topic
@@ -209,9 +259,9 @@ def generate_launch_description():
             'publish_hz': 20.0,
 
             # low-speed micro alignment limits
-            'max_vx': 0.030,
-            'max_vy': 0.030,
-            'max_wz': 0.150,
+            'max_vx': 0.100,
+            'max_vy': 0.100,
+            'max_wz': 0.400,
 
             'publish_stop_when_disabled': True,
             'print_debug': True,
@@ -228,7 +278,7 @@ def generate_launch_description():
         # 기존 640x360에서 200px 쓰던 것을 절반으로 낮춤.
         DeclareLaunchArgument(
             'target_size_px',
-            default_value='100.0'
+            default_value='50.0'
         ),
 
         auto_initial_pose_node,

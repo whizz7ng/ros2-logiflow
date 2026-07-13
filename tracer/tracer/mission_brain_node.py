@@ -10,6 +10,7 @@ from rclpy.node import Node
 
 from std_msgs.msg import String, Empty, Bool
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
 
 
 def split_csv(text: str) -> List[str]:
@@ -135,6 +136,14 @@ class MissionBrainNode(Node):
         self.declare_parameter('arm_status_topic', '/arm_status')
         self.declare_parameter('go_parking_topic', '/go_parking')
 
+        # External safety / direct-return commands. Any String payload triggers.
+        self.declare_parameter('emergency_stop_topic', '/emergency_stop')
+        self.declare_parameter('emergency_reset_topic', '/emergency_reset')
+        self.declare_parameter('go_home_topic', '/go_home')
+        self.declare_parameter('go_home_release_topic', '/go_home_release')
+        self.declare_parameter('idle_topic', '/idle')
+        self.declare_parameter('odom_topic', '/odometry/filtered')
+
         # Legacy compatibility.
         # 기본은 발행하지 않는다. 필요하면 launch에서 publish_legacy_stop_topics:=true.
         self.declare_parameter('stop_obj_topic', '/stop_obj')
@@ -156,6 +165,7 @@ class MissionBrainNode(Node):
         self.declare_parameter('pickup_goal_sequence', 'way12,to_obj')
         self.declare_parameter('pickup_route_name', '')
         self.declare_parameter('to_obj_goal_name', 'to_obj')
+        self.declare_parameter('parking_goal_name', 'parking_region')
 
         self.declare_parameter('obj_to_qr_route_template', 'obj_to_qr_{target_lower}')
         self.declare_parameter('qr_to_parking_route_template', 'qr_{from_qr_lower}_to_parking')
@@ -185,7 +195,7 @@ class MissionBrainNode(Node):
 
         # ArUco가 오래 걸리면 일단 작업 지점에 왔다고 보고 arrived_objects/arrived를 발행한다.
         self.declare_parameter('force_stop_on_long_aruco_align', True)
-        self.declare_parameter('aruco_force_stop_sec', 5.0)
+        self.declare_parameter('aruco_force_stop_sec', 10.0)
         self.declare_parameter('stop_aruco_on_force_stop', True)
         self.declare_parameter('stop_primitive_on_force_stop', True)
 
@@ -195,6 +205,14 @@ class MissionBrainNode(Node):
         self.declare_parameter('stop_obj_delay_sec', 1.0)
         self.declare_parameter('stop_qr_delay_sec', 1.0)
         self.declare_parameter('command_timeout_sec', 240.0)
+
+        # Stop confirmation used by emergency_stop and go_home.
+        self.declare_parameter('stop_confirm_vx', 0.02)
+        self.declare_parameter('stop_confirm_vy', 0.02)
+        self.declare_parameter('stop_confirm_wz', 0.05)
+        self.declare_parameter('stop_confirm_count', 3)
+        self.declare_parameter('stop_confirm_max_wait_sec', 1.0)
+        self.declare_parameter('stop_odom_timeout_sec', 0.30)
 
         self.declare_parameter('allow_new_target_when_busy', False)
 
@@ -226,6 +244,19 @@ class MissionBrainNode(Node):
         self.aruco_wait_kind = ''  # 'obj' or 'qr'
         self.aruco_wait_goal = ''
         self.aruco_force_stop_fired = False
+
+        # External safety state is independent from mission state.
+        self.emergency_latched = False
+        self.safety_action = ''  # '', 'ESTOPPING', 'GO_HOME_STOPPING'
+        self.safety_action_start = 0.0
+        self.stop_confirm_counter = 0
+        self.idle_published_for_action = False
+
+        self.have_odom = False
+        self.last_odom_time = 0.0
+        self.odom_vx = 0.0
+        self.odom_vy = 0.0
+        self.odom_wz = 0.0
 
         # ============================================================
         # Publishers
@@ -278,6 +309,18 @@ class MissionBrainNode(Node):
             10
         )
 
+        self.idle_pub = self.create_publisher(
+            String,
+            self.get_parameter('idle_topic').value,
+            10
+        )
+
+        self.go_home_release_pub = self.create_publisher(
+            String,
+            self.get_parameter('go_home_release_topic').value,
+            10
+        )
+
         # ============================================================
         # Subscribers
         # ============================================================
@@ -285,6 +328,10 @@ class MissionBrainNode(Node):
         self.create_subscription(String, self.get_parameter('order_request_topic').value, self.order_request_cb, 10)
         self.create_subscription(String, self.get_parameter('arm_status_topic').value, self.arm_status_cb, 10)
         self.create_subscription(Empty, self.get_parameter('go_parking_topic').value, self.go_parking_cb, 10)
+        self.create_subscription(String, self.get_parameter('emergency_stop_topic').value, self.emergency_stop_cb, 10)
+        self.create_subscription(String, self.get_parameter('emergency_reset_topic').value, self.emergency_reset_cb, 10)
+        self.create_subscription(String, self.get_parameter('go_home_topic').value, self.go_home_cb, 10)
+        self.create_subscription(Odometry, self.get_parameter('odom_topic').value, self.odom_cb, 10)
         self.create_subscription(String, self.get_parameter('nav_status_topic').value, self.nav_status_cb, 10)
         self.create_subscription(Bool, self.get_parameter('aruco_done_topic').value, self.aruco_done_cb, 10)
         self.create_subscription(String, self.get_parameter('aruco_status_topic').value, self.aruco_status_cb, 10)
@@ -295,7 +342,8 @@ class MissionBrainNode(Node):
 
         self.publish_status(
             'mission_brain_ready | '
-            'inputs=/place_target,/order_request,/arm_status,/go_parking | '
+            'inputs=/place_target,/order_request,/arm_status,/go_parking,'
+            '/emergency_stop,/emergency_reset,/go_home | '
             'internal_nav_status=/debug/nav_status | '
             'external_nav_status=/nav_status | '
             'outputs=/primitive_route_cmd,/marker_align_target,/agv_align_enable'
@@ -351,6 +399,81 @@ class MissionBrainNode(Node):
                 self.agv_align_allowed_state(new_state),
                 reason=f'state:{old}->{new_state}'
             )
+
+    def publish_idle(self, reason=''):
+        if self.idle_published_for_action:
+            return
+        msg = String()
+        msg.data = 'IDLE'
+        self.idle_pub.publish(msg)
+        self.idle_published_for_action = True
+        self.publish_status(f'idle_published:IDLE:reason={reason}:estop_latched={self.emergency_latched}')
+
+    def publish_go_home_release(self, reason=''):
+        msg = String()
+        msg.data = 'release'
+        self.go_home_release_pub.publish(msg)
+        self.publish_status(f'go_home_release_published:reason={reason}')
+
+    def clear_mission_context_for_safety(self):
+        self.current_target = None
+        self.current_qr_target = None
+        self.active_command_kind = ''
+        self.active_command_name = ''
+        self.active_command_sent_time = 0.0
+        self.pickup_goals = []
+        self.pickup_index = 0
+        self.stop_obj_published = False
+        self.stop_qr_published = False
+        self.stop_obj_due_time = 0.0
+        self.stop_qr_due_time = 0.0
+        self.clear_aruco_wait()
+
+    def motion_request_blocked(self):
+        return (
+            self.emergency_latched
+            or self.safety_action in ['ESTOPPING', 'GO_HOME_STOPPING']
+            or self.state in ['ESTOPPING', 'GO_HOME_STOPPING', 'RUN_GO_HOME']
+        )
+
+    def odom_is_fresh(self, now):
+        if not self.have_odom:
+            return False
+        return (now - self.last_odom_time) <= max(0.01, float(self.p('stop_odom_timeout_sec')))
+
+    def odom_is_stationary(self):
+        return (
+            abs(self.odom_vx) < abs(float(self.p('stop_confirm_vx')))
+            and abs(self.odom_vy) < abs(float(self.p('stop_confirm_vy')))
+            and abs(self.odom_wz) < abs(float(self.p('stop_confirm_wz')))
+        )
+
+    def finish_emergency_stop(self, reason):
+        self.safety_action = ''
+        self.safety_action_start = 0.0
+        self.stop_confirm_counter = 0
+        self.clear_mission_context_for_safety()
+        self.set_state('IDLE')
+        self.publish_idle(reason=f'emergency_stop:{reason}')
+        self.publish_status(
+            f'emergency_stop_completed:reason={reason}:state=IDLE:'
+            f'estop_latched={self.emergency_latched}'
+        )
+
+    def start_direct_go_home(self, reason):
+        if self.emergency_latched:
+            self.publish_status('go_home_start_rejected:estop_latched')
+            return
+
+        self.safety_action = ''
+        self.safety_action_start = 0.0
+        self.stop_confirm_counter = 0
+        self.publish_go_home_release(reason=reason)
+
+        goal_name = str(self.p('parking_goal_name')).strip()
+        self.set_state('RUN_GO_HOME')
+        self.send_goal(goal_name)
+        self.publish_status(f'go_home_goal_started:goal={goal_name}:reason={reason}')
 
     def valid_target_set(self):
         return {x.upper() for x in split_csv(self.p('valid_targets'))}
@@ -518,6 +641,60 @@ class MissionBrainNode(Node):
     # ============================================================
     # Input callbacks
     # ============================================================
+    def odom_cb(self, msg):
+        twist = msg.twist.twist
+        self.odom_vx = float(twist.linear.x)
+        self.odom_vy = float(twist.linear.y)
+        self.odom_wz = float(twist.angular.z)
+        self.last_odom_time = time.monotonic()
+        self.have_odom = True
+
+    def emergency_stop_cb(self, msg):
+        # Any received String payload triggers the E-stop.
+        del msg
+        self.emergency_latched = True
+        self.safety_action = 'ESTOPPING'
+        self.safety_action_start = time.monotonic()
+        self.stop_confirm_counter = 0
+        self.idle_published_for_action = False
+
+        self.send_aruco_cmd('stop')
+        self.send_primitive('stop', kind='safety', name='emergency_stop')
+        self.publish_agv_align_enable(False, reason='emergency_stop')
+        self.clear_mission_context_for_safety()
+        self.set_state('ESTOPPING')
+        self.publish_status('emergency_stop_received:latch=true:waiting_for_stop_confirmation')
+
+    def emergency_reset_cb(self, msg):
+        # Any received String payload releases only the E-stop latch.
+        del msg
+        was_latched = self.emergency_latched
+        self.emergency_latched = False
+        self.publish_status(f'emergency_reset_received:was_latched={was_latched}:state={self.state}')
+
+    def go_home_cb(self, msg):
+        # Any received String payload cancels the current mission and returns directly.
+        del msg
+        if self.emergency_latched:
+            self.publish_status('go_home_rejected:estop_latched')
+            return
+
+        if self.state in ['GO_HOME_STOPPING', 'RUN_GO_HOME']:
+            self.publish_status(f'go_home_ignored:already_active:state={self.state}')
+            return
+
+        self.safety_action = 'GO_HOME_STOPPING'
+        self.safety_action_start = time.monotonic()
+        self.stop_confirm_counter = 0
+        self.idle_published_for_action = False
+
+        self.send_aruco_cmd('stop')
+        self.send_primitive('stop', kind='safety', name='go_home')
+        self.publish_agv_align_enable(False, reason='go_home')
+        self.clear_mission_context_for_safety()
+        self.set_state('GO_HOME_STOPPING')
+        self.publish_status('go_home_received:current_route_cancelled:waiting_for_stop_confirmation')
+
     def place_target_cb(self, msg):
         target = self.normalize_target(msg.data)
         self.handle_new_target_request(target, source='place_target')
@@ -532,6 +709,13 @@ class MissionBrainNode(Node):
 
     def handle_new_target_request(self, target, source='place_target'):
         target = self.normalize_target(target)
+
+        if self.motion_request_blocked():
+            self.publish_status(
+                f'{source}_rejected:safety_active:state={self.state}:'
+                f'estop_latched={self.emergency_latched}:target={target}'
+            )
+            return
 
         if target not in self.valid_target_set():
             self.publish_status(f'{source}_rejected:invalid_target:{target}')
@@ -573,6 +757,9 @@ class MissionBrainNode(Node):
 
     def arm_status_cb(self, msg):
         status = str(msg.data).strip().lower()
+        if self.motion_request_blocked():
+            self.publish_status(f'arm_status_ignored:safety_active:{status}:state={self.state}')
+            return
         self.publish_status(f'arm_status_received:{status}:state={self.state}')
 
         if status != 'picked':
@@ -599,6 +786,9 @@ class MissionBrainNode(Node):
         self.publish_status(f'run_to_qr_started:target={self.current_target}:route={route}')
 
     def go_parking_cb(self, msg):
+        if self.motion_request_blocked():
+            self.publish_status(f'go_parking_rejected:safety_active:state={self.state}')
+            return
         if self.state not in ['WAIT_NEXT', 'PARKED', 'IDLE']:
             self.publish_status(f'go_parking_rejected:state={self.state}')
             return
@@ -679,6 +869,25 @@ class MissionBrainNode(Node):
             'aruco_timeout',
         ]):
             self.publish_status(f'nav_event:{text}')
+
+        # Direct go-home completion/failure.
+        if self.state == 'RUN_GO_HOME':
+            if self.active_route_finished_by_status(text):
+                self.current_target = None
+                self.current_qr_target = None
+                self.set_state('IDLE')
+                self.publish_external_nav_status('parked', reason='go_home_finished')
+                self.publish_idle(reason='go_home_finished')
+                self.publish_status(f'go_home_finished:{self.active_command_name}:state=IDLE')
+                return
+
+            if self.active_route_failed_by_status(text):
+                self.publish_status(f'go_home_failed:{text}')
+                self.set_state('GO_HOME_FAILED')
+                return
+
+        if self.state in ['ESTOPPING', 'GO_HOME_STOPPING']:
+            return
 
         # ------------------------------------------------------------
         # primitive runner가 ArUco wait에 들어갔을 때 target을 한 번 더 보정
@@ -947,6 +1156,30 @@ class MissionBrainNode(Node):
     def timer_cb(self):
         now = time.monotonic()
 
+        if self.safety_action in ['ESTOPPING', 'GO_HOME_STOPPING']:
+            if self.odom_is_fresh(now) and self.odom_is_stationary():
+                self.stop_confirm_counter += 1
+            else:
+                self.stop_confirm_counter = 0
+
+            required_count = max(1, int(self.p('stop_confirm_count')))
+            elapsed = now - self.safety_action_start if self.safety_action_start > 0.0 else 0.0
+            max_wait = max(0.0, float(self.p('stop_confirm_max_wait_sec')))
+            confirmed = self.stop_confirm_counter >= required_count
+            timed_out = max_wait > 0.0 and elapsed >= max_wait
+
+            if confirmed or timed_out:
+                reason = (
+                    f'odom_confirmed_{self.stop_confirm_counter}'
+                    if confirmed
+                    else f'max_wait_timeout_{elapsed:.2f}s'
+                )
+                action = self.safety_action
+                if action == 'ESTOPPING':
+                    self.finish_emergency_stop(reason)
+                elif action == 'GO_HOME_STOPPING':
+                    self.start_direct_go_home(reason)
+
         if self.state == 'WAIT_STOP_OBJ_DELAY' and self.stop_obj_due_time > 0.0:
             if now >= self.stop_obj_due_time:
                 self.publish_stop_obj()
@@ -982,7 +1215,7 @@ class MissionBrainNode(Node):
         if timeout <= 0.0:
             return
 
-        if self.state in ['RUN_PICKUP', 'WAIT_TO_OBJ_ARUCO', 'RUN_TO_QR', 'WAIT_TO_QR_ARUCO', 'RUN_PARKING']:
+        if self.state in ['RUN_PICKUP', 'WAIT_TO_OBJ_ARUCO', 'RUN_TO_QR', 'WAIT_TO_QR_ARUCO', 'RUN_PARKING', 'RUN_GO_HOME']:
             if self.active_command_sent_time > 0.0 and (now - self.active_command_sent_time) > timeout:
                 self.publish_status(
                     f'brain_command_timeout:state={self.state}:'
@@ -990,7 +1223,11 @@ class MissionBrainNode(Node):
                     f'elapsed={now - self.active_command_sent_time:.1f}'
                 )
                 self.clear_aruco_wait()
-                self.set_state('IDLE')
+                self.send_primitive('stop', kind='safety', name='command_timeout')
+                if self.state == 'RUN_GO_HOME':
+                    self.set_state('GO_HOME_FAILED')
+                else:
+                    self.set_state('IDLE')
 
 
 def main(args=None):

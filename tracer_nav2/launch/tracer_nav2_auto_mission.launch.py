@@ -158,7 +158,7 @@ def generate_launch_description():
             'primitive_cmd_topic': '/nav2_route_cmd',
             'nav_status_topic': '/debug/nav_status',
 
-            'order_request_topic': '/order_request',
+            'order_request_topic': '/order_request_unused',
             'place_target_topic': '/place_target',
             'arm_status_topic': '/arm_status',
             'go_parking_topic': '/go_parking',

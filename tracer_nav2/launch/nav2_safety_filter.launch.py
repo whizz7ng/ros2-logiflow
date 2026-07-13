@@ -43,7 +43,7 @@ def generate_launch_description():
 
     cmd_vel_safety_filter = Node(
         package='tracer_nav2',
-        executable='vel_filter_v2_node',
+        executable='vel_filter_node',
         name='cmd_vel_safety_filter',
         output='screen',
         parameters=[{

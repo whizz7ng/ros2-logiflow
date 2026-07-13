@@ -138,6 +138,9 @@ class Nav2RouteRunnerNode(Node):
         self.goal_sent_time = 0.0
         self.aruco_wait_start = 0.0
 
+        # Invalidates late callbacks from a cancelled/preempted Nav2 goal.
+        self.command_generation = 0
+
         self.timer = self.create_timer(0.10, self.timer_cb)
 
         self.publish_status(
@@ -265,6 +268,7 @@ class Nav2RouteRunnerNode(Node):
             self.publish_status(f'route_goal_failed:{route_name}:empty:empty_route')
             return
 
+        self.command_generation += 1
         self.active = True
         self.state = 'IDLE'
         self.current_route_name = route_name
@@ -321,18 +325,32 @@ class Nav2RouteRunnerNode(Node):
             f'x={pose.pose.position.x:.3f}:y={pose.pose.position.y:.3f}'
         )
 
+        generation = self.command_generation
         send_future = self.nav_client.send_goal_async(goal_msg)
-        send_future.add_done_callback(self.goal_response_cb)
+        send_future.add_done_callback(
+            lambda future, gen=generation: self.goal_response_cb(future, gen)
+        )
 
-    def goal_response_cb(self, future):
-        if not self.active:
-            return
-
+    def goal_response_cb(self, future, generation):
         try:
             goal_handle = future.result()
         except Exception as e:
-            self.publish_status(f'route_goal_failed:{self.current_route_name}:{self.current_goal_name}:send_exception:{e}')
-            self.reset_state()
+            if generation == self.command_generation and self.active:
+                self.publish_status(
+                    f'route_goal_failed:{self.current_route_name}:{self.current_goal_name}:'
+                    f'send_exception:{e}'
+                )
+                self.reset_state()
+            return
+
+        # A stop/preempt may arrive while the action request is still SENDING.
+        # If Nav2 accepts that stale goal later, cancel it immediately.
+        if generation != self.command_generation or not self.active:
+            if goal_handle is not None and goal_handle.accepted:
+                try:
+                    goal_handle.cancel_goal_async()
+                except Exception:
+                    pass
             return
 
         if not goal_handle.accepted:
@@ -343,10 +361,12 @@ class Nav2RouteRunnerNode(Node):
         self.goal_handle = goal_handle
         self.state = 'NAVIGATING'
         result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.goal_result_cb)
+        result_future.add_done_callback(
+            lambda future, gen=generation: self.goal_result_cb(future, gen)
+        )
 
-    def goal_result_cb(self, future):
-        if not self.active:
+    def goal_result_cb(self, future, generation):
+        if generation != self.command_generation or not self.active:
             return
 
         try:
@@ -443,6 +463,9 @@ class Nav2RouteRunnerNode(Node):
     # Cancel / reset
     # ------------------------------------------------------------
     def cancel_current(self, reason='manual'):
+        # Invalidate callbacks belonging to the old goal before cancelling it.
+        self.command_generation += 1
+
         if not self.active:
             self.publish_status(f'route_cancelled:none:{reason}')
             return
