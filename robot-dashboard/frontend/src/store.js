@@ -8,11 +8,11 @@ const initialZones = [
 ];
 
 const initialProducts = [
-  { id: 1, color: "빨강", shape: "세모", name: "스킨 (150ml)", yoloLabel: "red_triangle", zoneId: 1, stock: 12, note: "", status: "활성" },
-  { id: 2, color: "파랑", shape: "네모", name: "로션 (120ml)", yoloLabel: "blue_square", zoneId: 2, stock: 9, note: "", status: "활성" },
-  { id: 3, color: "노랑", shape: "오각형", name: "립글로즈", yoloLabel: "yellow_pentagon", zoneId: 3, stock: 4, note: "재고 부족 주의", status: "활성" },
-  { id: 4, color: "초록", shape: "동그라미", name: "핸드크림", yoloLabel: "green_circle", zoneId: 3, stock: 15, note: "", status: "활성" },
-  { id: 5, color: "주황", shape: "십자가", name: "선크림 (50ml)", yoloLabel: "orange_cross", zoneId: 1, stock: 7, note: "", status: "활성" },
+  { id: 1, color: "빨강", shape: "세모", name: "스킨 (150ml)", yoloLabel: "red_triangle", zoneId: 1, stock: 12, note: "", status: "활성", rackLevel: "1층" },
+  { id: 2, color: "파랑", shape: "네모", name: "로션 (120ml)", yoloLabel: "blue_square", zoneId: 2, stock: 9, note: "", status: "활성", rackLevel: "2층" },
+  { id: 3, color: "노랑", shape: "오각형", name: "립글로즈", yoloLabel: "yellow_pentagon", zoneId: 3, stock: 4, note: "재고 부족 주의", status: "활성", rackLevel: "1층" },
+  { id: 4, color: "초록", shape: "동그라미", name: "핸드크림", yoloLabel: "green_circle", zoneId: 3, stock: 15, note: "", status: "활성", rackLevel: "2층" },
+  { id: 5, color: "주황", shape: "십자가", name: "선크림 (50ml)", yoloLabel: "orange_cross", zoneId: 1, stock: 7, note: "", status: "활성", rackLevel: "1층" },
 ];
 
 const initialMissionQueue = [

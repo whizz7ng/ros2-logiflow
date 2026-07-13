@@ -16,12 +16,13 @@ def seed_data():
     try:
         if db.query(Product).count() == 0:
             db.add_all([
-                Product(color="빨강", shape="세모", name="스킨 (150ml)", yolo_label="red_triangle", zone_id=1, stock=12, note="", status="활성"),
-                Product(color="파랑", shape="네모", name="로션 (120ml)", yolo_label="blue_square", zone_id=2, stock=9, note="", status="활성"),
-                Product(color="노랑", shape="오각형", name="립글로즈", yolo_label="yellow_pentagon", zone_id=3, stock=4, note="재고 부족 주의", status="활성"),
-                Product(color="초록", shape="동그라미", name="핸드크림", yolo_label="green_circle", zone_id=3, stock=15, note="", status="활성"),
-                Product(color="주황", shape="십자가", name="선크림 (50ml)", yolo_label="orange_cross", zone_id=1, stock=7, note="자외선 차단", status="활성"),
-            ])
+                Product(color="빨강", shape="세모", name="스킨 (150ml)", yolo_label="red_triangle", zone_id=1, stock=12, note="", status="활성", rack_level="1층"),
+                Product(color="파랑", shape="네모", name="로션 (120ml)", yolo_label="blue_square", zone_id=2, stock=9, note="", status="활성", rack_level="2층"),
+                Product(color="노랑", shape="오각형", name="립글로즈", yolo_label="yellow_pentagon", zone_id=3, stock=4, note="재고 부족 주의", status="활성", rack_level="1층"),
+                Product(color="초록", shape="동그라미", name="핸드크림", yolo_label="green_circle", zone_id=3, stock=15, note="", status="활성", rack_level="2층"),
+                Product(color="주황", shape="십자가", name="선크림 (50ml)", yolo_label="orange_cross", zone_id=1, stock=7, note="자외선 차단", status="활성", rack_level="1층"),
+            ])            
+            
             db.commit()
 
         if db.query(Zone).count() == 0:
@@ -99,4 +100,15 @@ def emergency_stop():
 @app.post("/api/robot/reset")
 def reset_estop():
     ros_node.publish_estop("reset")
+    return {"ok": True}
+
+@app.post("/api/robot/retry-pick")
+def retry_pick():
+    ros_node.retry_pick()
+    return {"ok": True}
+
+
+@app.post("/api/robot/go-home")
+def go_home():
+    ros_node.go_home()
     return {"ok": True}

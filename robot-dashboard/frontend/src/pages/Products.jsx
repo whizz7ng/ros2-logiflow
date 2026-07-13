@@ -108,7 +108,8 @@ export default function Products() {
               <th style={{ width: "10%" }}>모양</th>
               <th style={{ width: "16%" }}>상품명</th>
               <th style={{ width: "16%" }}>YOLO 라벨</th>
-              <th style={{ width: "10%" }}>배송 구역</th>
+              <th style={{ width: "9%" }}>배송 구역</th>
+              <th style={{ width: "8%" }}>랙 위치</th>
               <th style={{ width: "14%" }}>재고</th>
               <th style={{ width: "11%" }}>비고</th>
               <th style={{ width: "7%" }}>상태</th>
@@ -130,6 +131,7 @@ export default function Products() {
                   <td>{p.name}</td>
                   <td><span className="mono">{p.yoloLabel}</span></td>
                   <td><span className="badge b-zone">{zone ? zone.name : "—"}</span></td>
+                  <td><span className="badge b-gray">{p.rackLevel || "—"}</span></td>
                   <td>
                     <div className="qty-ctrl">
                       <button className="qty-btn" onClick={() => handleAdjustStock(p.id, -1)}>−</button>
@@ -173,7 +175,8 @@ function ProductModal({ product, zones, onSave, onClose }) {
   const [form, setForm] = useState(
     product
       ? { ...product }
-      : { color: "빨강", shape: "세모", name: "", yoloLabel: "", zoneId: zones[0]?.id || 1, stock: 0, note: "", status: "활성" }
+      // 초기값
+      : { color: "빨강", shape: "세모", name: "", yoloLabel: "", zoneId: zones[0]?.id || 1, stock: 0, note: "", status: "활성", rackLevel: "1층" }
   );
 
   const update = (key, val) => setForm({ ...form, [key]: val });
@@ -215,6 +218,13 @@ function ProductModal({ product, zones, onSave, onClose }) {
             <label>배송 구역</label>
             <select value={form.zoneId} onChange={(e) => update("zoneId", Number(e.target.value))}>
               {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+            </select>
+          </div>
+          <div className="form-row">
+            <label>랙 위치</label>
+            <select value={form.rackLevel || "1층"} onChange={(e) => update("rackLevel", e.target.value)}>
+              <option value="1층">1층</option>
+              <option value="2층">2층</option>
             </select>
           </div>
           <div className="form-row">

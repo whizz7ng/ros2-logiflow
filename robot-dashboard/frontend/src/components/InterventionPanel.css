@@ -13,10 +13,22 @@
   display: flex; align-items: center; gap: 6px;
 }
 .ib:hover { color: var(--text-primary); }
+
+.ib:active:not(:disabled) {
+  background: #E2E8F0;
+  transform: scale(0.97);
+}
+
 .estop {
   padding: 9px 8px; border-radius: 6px; border: 0.5px solid #FECACA;
   background: #FEF2F2; color: #991B1B;
   font-size: 11px; font-weight: 500; cursor: pointer;
   display: flex; align-items: center; gap: 6px;
 }
+
+.estop:active {
+  background: #FECACA;
+  transform: scale(0.97);
+}
+
 .divider { height: 0.5px; background: #F1F5F9; margin: 8px 0; }

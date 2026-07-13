@@ -1,5 +1,5 @@
 import useStore from "../store";
-import { emergencyStop } from "../api";
+import { emergencyStop, retryPick, goHome } from "../api";
 import "./InterventionPanel.css";
 
 export default function InterventionPanel() {
@@ -11,6 +11,22 @@ export default function InterventionPanel() {
       await emergencyStop();
     } catch (e) {
       console.error("E-STOP 전송 실패", e);
+    }
+  };
+
+  const handleRetryPick = async () => {
+    try {
+      await retryPick();
+    } catch (e) {
+      console.error("피킹 재시도 전송 실패", e);
+    }
+  };
+
+  const handleGoHome = async () => {
+    try {
+      await goHome();
+    } catch (e) {
+      console.error("홈 복귀 전송 실패", e);
     }
   };
 
@@ -44,13 +60,13 @@ export default function InterventionPanel() {
 
       <div className="int-sect">현재 미션</div>
       <div className="btn-row">
-        <button className="ib" disabled title="미구현">🔄 피킹 재시도</button>
+        <button className="ib" onClick={handleRetryPick}>🔄 주행Reset</button>
         <button className="ib" disabled title="미구현">⬇ 낙하물 회수</button>
       </div>
       <div className="divider" />
       <div className="int-sect">하드웨어</div>
       <div className="btn-row">
-        <button className="ib" disabled title="미구현">🏠 홈 복귀</button>
+        <button className="ib" onClick={handleGoHome}>🏠 홈 복귀</button>
         <button className="estop" onClick={handleEstop}>⚠ 긴급 정지 (E-STOP)</button>
       </div>
     </div>

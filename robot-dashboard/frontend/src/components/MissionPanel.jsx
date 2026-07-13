@@ -40,7 +40,8 @@ export default function MissionPanel() {
       label: p.yoloLabel,
       zoneId: p.zoneId,
       zoneName: zone ? zone.name : "—",
-      display: `${p.name} — ${p.color} ${SHAPE_SYMBOL[p.shape] || p.shape}`,
+      rackLevel: p.rackLevel || "—",
+      display: `${p.name} — ${p.color} ${SHAPE_SYMBOL[p.shape] || p.shape} · ${p.rackLevel || "—"}`,
     };
   });
 
@@ -54,6 +55,7 @@ export default function MissionPanel() {
       yoloLabel: picked.label,
       zoneId: picked.zoneId,
       zoneName: picked.zoneName,
+      rackLevel: picked.rackLevel, 
     });
     setSelected("");
   };
@@ -74,11 +76,16 @@ export default function MissionPanel() {
             ))}
           </select>
         </div>
+
         <div className="zone-auto">
           <div className="za-lbl">배송 구역</div>
           <div className="za-val">{picked ? picked.zoneName : "—"}</div>
+          <div className="za-cls" style={{ fontWeight: 700, color: "#00C2FF" }}>
+            랙 {picked ? picked.rackLevel : "—"}
+          </div>
           <div className="za-cls">{picked ? picked.label : "label"}</div>
         </div>
+
       </div>
 
       <button className="add-q-btn" onClick={addQueue}>＋ 큐에 추가</button>
