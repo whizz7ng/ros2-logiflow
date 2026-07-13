@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
 from models import MissionItem, AppState
-from ros_node import publish_next_order, reset_current_item
+from ros_node import (
+    publish_next_order,
+    reset_current_item,
+    broadcast_mission_state,
+    reset_cobot_status,
+)
 
 router = APIRouter(prefix="/api/missions", tags=["missions"])
 
@@ -14,6 +19,7 @@ class MissionAdd(BaseModel):
     yolo_label: str = ""
     zone_id: int = 0
     zone_name: str = ""
+    rack_level: str = "1층"
 
 class MissionCommand(BaseModel):
     action: str  # start / pause / resume / cancel
@@ -96,13 +102,20 @@ def mission_command(body: MissionCommand, db: Session = Depends(get_db)):
 
     _set_mission_state(db, new_state)
 
+    # 모든 화면에 미션 상태 브로드캐스트 (동기화)
+    broadcast_mission_state(new_state)
+
     if new_state == "cancelled":
         db.query(MissionItem).delete()
         db.commit()
         reset_current_item()
 
     if new_state == "paused":
-        reset_current_item() 
+        reset_current_item()
+
+    # 시작/재개 시 myCobot 상태 초기화 (모든 화면)
+    if action in ("start", "resume"):
+        reset_cobot_status()
 
     if new_state == "running":
         publish_next_order()

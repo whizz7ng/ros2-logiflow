@@ -18,6 +18,8 @@ class ProductCreate(BaseModel):
     stock: int = 0
     note: str = ""
     status: str = "활성"
+    rack_level: str = "1층"          # ← 추가
+
 
 class ProductUpdate(BaseModel):
     color: Optional[str] = None
@@ -28,6 +30,7 @@ class ProductUpdate(BaseModel):
     stock: Optional[int] = None
     note: Optional[str] = None
     status: Optional[str] = None
+    rack_level: Optional[str] = None  # ← 추가
 
 class StockAdjust(BaseModel):
     delta: int

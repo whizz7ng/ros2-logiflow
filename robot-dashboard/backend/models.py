@@ -14,6 +14,7 @@ class Product(Base):
     stock = Column(Integer, default=0)
     note = Column(String, default="")
     status = Column(String, default="활성")        # 활성/비활성
+    rack_level = Column(String, default="1층")     # 1층/2층
 
 
 class Zone(Base):
@@ -39,6 +40,7 @@ class MissionItem(Base):
     zone_name = Column(String, default="")
     position = Column(Integer, default=0)         # 큐 내 순서
     created_at = Column(DateTime, server_default=func.now())
+    rack_level = Column(String, default="1층")
 
 
 class HistoryRecord(Base):

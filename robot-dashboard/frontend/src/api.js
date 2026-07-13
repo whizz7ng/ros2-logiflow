@@ -209,6 +209,14 @@ export async function emergencyStop() {
   return request("/robot/estop", { method: "POST" });
 }
 
+export async function retryPick() {
+  return request("/robot/retry-pick", { method: "POST" });
+}
+
+export async function goHome() {
+  return request("/robot/go-home", { method: "POST" });
+}
+
 // ── 라벨(.yaml/.json) 업로드 (Phase 5에서 실제 파싱) ─────
 export async function uploadLabelModel(file) {
   await delay(500);
