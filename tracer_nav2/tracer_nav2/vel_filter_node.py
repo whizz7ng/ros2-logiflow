@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+"""
+Tracer Nav2 comparison filter (V2 algorithm).
+
+Placement:
+  ~/myagv_ros2/src/tracer_nav2/tracer_nav2/vel_filter_node.py
+
+This file intentionally preserves the uploaded vel_filter_node.py behavior:
+  - STRAIGHT / TURN / LATERAL mode separation
+  - acceleration limiting
+  - pulse/dead-zone adapter
+  - command-state based zero-cross / turn-exit handling
+  - emergency-stop and go-home safety latches
+
+It is provided inside tracer_nav2 so it can be compared, one run at a time,
+against tracer_nav2.vel_filter_v3_node.
+"""
 
 import time
 import rclpy

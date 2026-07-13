@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+*.py[cod]
+*.bak*
+*.save
+install/
+log/
+tracer/log/
+tracer/topic_log/
+tracer_nav2/log/
+tracer_nav2/topic_log/
+*.db3

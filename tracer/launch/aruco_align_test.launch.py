@@ -228,12 +228,12 @@ def generate_launch_description():
             default_value='C:73,B:87,A:88,RACK:89,OBJ:89,TO_OBJ:89'
         ),
         DeclareLaunchArgument('process_every_n_frames', default_value='1'),
-        DeclareLaunchArgument('min_control_side_px', default_value='60.0'),
+        DeclareLaunchArgument('min_control_side_px', default_value='15.0'),
         DeclareLaunchArgument('max_control_aspect_ratio', default_value='1.50'),
 
         # User requirement:
         # center tolerance 60px, min side >= 210px
-        DeclareLaunchArgument('target_size_px', default_value='200.0'),
+        DeclareLaunchArgument('target_size_px', default_value='50.0'),
         DeclareLaunchArgument('size_tolerance_px', default_value='0.0'),
         DeclareLaunchArgument('target_cx_px', default_value='-1.0'),
         DeclareLaunchArgument('center_tolerance_px', default_value='60.0'),
@@ -243,11 +243,11 @@ def generate_launch_description():
         DeclareLaunchArgument('marker_smoothing_alpha', default_value='0.35'),
 
         DeclareLaunchArgument('kp_vx', default_value='0.00100'),
-        DeclareLaunchArgument('kp_vy', default_value='0.00015'),
-        DeclareLaunchArgument('max_vx', default_value='0.045'),
+        DeclareLaunchArgument('kp_vy', default_value='0.00035'),
+        DeclareLaunchArgument('max_vx', default_value='0.040'),
         DeclareLaunchArgument('min_vx', default_value='0.018'),
-        DeclareLaunchArgument('max_vy', default_value='0.015'),
-        DeclareLaunchArgument('min_vy', default_value='0.006'),
+        DeclareLaunchArgument('max_vy', default_value='0.040'),
+        DeclareLaunchArgument('min_vy', default_value='0.025'),
         DeclareLaunchArgument('invert_y', default_value='false'),
 
         DeclareLaunchArgument('lost_timeout_sec', default_value='1.5'),

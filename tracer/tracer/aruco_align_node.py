@@ -129,7 +129,7 @@ class ArucoAlignNode(Node):
         # ============================================================
         # Detection quality gate params
         # ============================================================
-        self.declare_parameter('min_control_side_px', 60.0)
+        self.declare_parameter('min_control_side_px', 15.0)
         self.declare_parameter('max_control_aspect_ratio', 1.50)
         self.declare_parameter('min_control_area_px', 0.0)
         self.declare_parameter('prefer_largest_marker', True)
@@ -149,7 +149,7 @@ class ArucoAlignNode(Node):
         # ============================================================
         # Align params
         # ============================================================
-        self.declare_parameter('target_size_px', 200.0)
+        self.declare_parameter('target_size_px', 140.0)
         self.declare_parameter('size_tolerance_px', 0.0)
 
         self.declare_parameter('target_cx_px', -1.0)
@@ -163,7 +163,24 @@ class ArucoAlignNode(Node):
         self.declare_parameter('max_vx', 0.045)
         self.declare_parameter('min_vx', 0.018)
         self.declare_parameter('max_vy', 0.015)
-        self.declare_parameter('min_vy', 0.006)
+        self.declare_parameter('min_vy', 0.012)
+
+        # ============================================================
+        # Rough front/yaw alignment params
+        # ============================================================
+        # 정밀 solvePnP 없이 ArUco 사각형 왜곡만 보고 대략 정면 여부를 판단한다.
+        # yaw_error는 좌/우 세로변 길이 차이 기반의 signed skew 값이다.
+        self.declare_parameter('enable_front_align', True)
+        self.declare_parameter('front_align_only_when_center_ok', True)
+        self.declare_parameter('front_skew_tol', 0.12)
+        self.declare_parameter('front_lr_ratio_max', 1.30)
+        self.declare_parameter('front_tb_ratio_max', 1.30)
+        self.declare_parameter('front_angle_tol_deg', 25.0)
+
+        self.declare_parameter('kp_wz', 0.60)
+        self.declare_parameter('max_wz', 0.12)
+        self.declare_parameter('min_wz', 0.05)
+        self.declare_parameter('invert_wz', False)
 
         # image x 오른쪽 증가. ROS base_link +y는 왼쪽.
         # marker가 오른쪽(err_cx +)이면 오른쪽 이동을 위해 vy 음수가 보통 맞음.
@@ -454,6 +471,32 @@ class ArucoAlignNode(Node):
         area = float(abs(cv2.contourArea(pts.astype(np.float32))))
         aspect_ratio = max_side / max(min_side, 1e-6)
 
+        # ------------------------------------------------------------
+        # Rough front/yaw metrics from marker quadrilateral
+        # OpenCV ArUco corner order is usually p0=top-left, p1=top-right,
+        # p2=bottom-right, p3=bottom-left.
+        # These are approximate visual metrics, not calibrated 3D pose.
+        # ------------------------------------------------------------
+        p0, p1, p2, p3 = pts
+        side_top = float(np.linalg.norm(p1 - p0))
+        side_right = float(np.linalg.norm(p2 - p1))
+        side_bottom = float(np.linalg.norm(p3 - p2))
+        side_left = float(np.linalg.norm(p0 - p3))
+
+        lr_ratio = max(side_left, side_right) / max(min(side_left, side_right), 1e-6)
+        tb_ratio = max(side_top, side_bottom) / max(min(side_top, side_bottom), 1e-6)
+
+        # signed yaw-ish skew. Positive means right vertical edge appears longer.
+        vertical_mean = max((side_left + side_right) * 0.5, 1e-6)
+        yaw_error = (side_right - side_left) / vertical_mean
+
+        # marker in-plane angle on image. This is mostly for debug / loose gate.
+        angle_deg = math.degrees(math.atan2(float(p1[1] - p0[1]), float(p1[0] - p0[0])))
+        while angle_deg > 90.0:
+            angle_deg -= 180.0
+        while angle_deg < -90.0:
+            angle_deg += 180.0
+
         target_id = int(self.p('target_id'))
         target_match = True if target_id < 0 else (int(marker_id) == target_id)
 
@@ -470,6 +513,17 @@ class ArucoAlignNode(Node):
             'aspect_ratio': aspect_ratio,
             'area': area,
             'size': min_side,
+
+            # rough front/yaw metrics
+            'side_top': side_top,
+            'side_right': side_right,
+            'side_bottom': side_bottom,
+            'side_left': side_left,
+            'lr_ratio': lr_ratio,
+            'tb_ratio': tb_ratio,
+            'angle_deg': angle_deg,
+            'yaw_error': yaw_error,
+
             'valid': False,
             'reject_reason': '',
         }
@@ -493,6 +547,67 @@ class ArucoAlignNode(Node):
             return False, f'area {area:.0f} < {min_control_area:.0f}'
 
         return True, 'ok'
+
+    def front_quality_ok(self, marker):
+        """Rough front/yaw gate based on ArUco quadrilateral shape.
+
+        This is intentionally loose: it only rejects obviously skewed views.
+        It does not require camera calibration.
+        """
+        if not bool(self.p('enable_front_align')):
+            return True, 'front_disabled'
+
+        yaw_error = abs(float(marker.get('yaw_error', 0.0)))
+        lr_ratio = float(marker.get('lr_ratio', 1.0))
+        tb_ratio = float(marker.get('tb_ratio', 1.0))
+        angle_deg = abs(float(marker.get('angle_deg', 0.0)))
+
+        skew_tol = abs(float(self.p('front_skew_tol')))
+        lr_max = float(self.p('front_lr_ratio_max'))
+        tb_max = float(self.p('front_tb_ratio_max'))
+        angle_tol = abs(float(self.p('front_angle_tol_deg')))
+
+        if skew_tol > 0.0 and yaw_error > skew_tol:
+            return False, f'yaw_skew {yaw_error:.3f} > {skew_tol:.3f}'
+
+        if lr_max > 0.0 and lr_ratio > lr_max:
+            return False, f'lr_ratio {lr_ratio:.2f} > {lr_max:.2f}'
+
+        if tb_max > 0.0 and tb_ratio > tb_max:
+            return False, f'tb_ratio {tb_ratio:.2f} > {tb_max:.2f}'
+
+        if angle_tol > 0.0 and angle_deg > angle_tol:
+            return False, f'angle {angle_deg:.1f} > {angle_tol:.1f}'
+
+        return True, 'front_ok'
+
+    def compute_front_wz(self, marker):
+        """Compute a small angular.z command from signed marker skew.
+
+        If the sign is opposite on the real robot, set invert_wz:=true in launch.
+        """
+        yaw_error = float(marker.get('yaw_error', 0.0))
+        skew_tol = abs(float(self.p('front_skew_tol')))
+
+        if abs(yaw_error) <= skew_tol:
+            return 0.0
+
+        kp_wz = float(self.p('kp_wz'))
+        max_wz = abs(float(self.p('max_wz')))
+        min_wz = abs(float(self.p('min_wz')))
+
+        wz = kp_wz * yaw_error
+
+        if bool(self.p('invert_wz')):
+            wz = -wz
+
+        if max_wz > 0.0:
+            wz = clamp(wz, -max_wz, max_wz)
+
+        if abs(wz) > 1e-6 and min_wz > 0.0 and abs(wz) < min_wz:
+            wz = math.copysign(min_wz, wz)
+
+        return float(wz)
 
     def print_reject_debug_throttled(self):
         if not bool(self.p('print_reject_debug')):
@@ -629,6 +744,14 @@ class ArucoAlignNode(Node):
             'max_side': round(float(marker.get('max_side', 0.0)), 2),
             'aspect_ratio': round(float(marker.get('aspect_ratio', 0.0)), 3),
             'area': round(float(marker.get('area', 0.0)), 1),
+            'side_top': round(float(marker.get('side_top', 0.0)), 2),
+            'side_right': round(float(marker.get('side_right', 0.0)), 2),
+            'side_bottom': round(float(marker.get('side_bottom', 0.0)), 2),
+            'side_left': round(float(marker.get('side_left', 0.0)), 2),
+            'lr_ratio': round(float(marker.get('lr_ratio', 0.0)), 3),
+            'tb_ratio': round(float(marker.get('tb_ratio', 0.0)), 3),
+            'angle_deg': round(float(marker.get('angle_deg', 0.0)), 2),
+            'yaw_error': round(float(marker.get('yaw_error', 0.0)), 3),
         }
 
         if include_corners and 'pts' in marker and marker['pts'] is not None:
@@ -841,7 +964,15 @@ class ArucoAlignNode(Node):
             'max_side',
             'aspect_ratio',
             'area',
-            'size'
+            'size',
+            'side_top',
+            'side_right',
+            'side_bottom',
+            'side_left',
+            'lr_ratio',
+            'tb_ratio',
+            'angle_deg',
+            'yaw_error'
         ]:
             sm[key] = alpha * float(marker[key]) + (1.0 - alpha) * float(prev[key])
 
@@ -987,6 +1118,7 @@ class ArucoAlignNode(Node):
 
             size_ok = size >= target_size - size_tol
             center_ok = abs(err_cx) <= center_tol
+            front_ok, _front_reason = self.front_quality_ok(marker)
 
             cv2.circle(dbg, (cx, cy), 5, (0, 0, 255), -1)
 
@@ -996,7 +1128,11 @@ class ArucoAlignNode(Node):
                 f'cx={marker["cx"]:.1f} err={err_cx:.1f} '
                 f'minSide={size:.1f}/{target_size:.0f} '
                 f'ratio={marker["aspect_ratio"]:.2f} '
-                f'C={int(center_ok)} S={int(size_ok)}',
+                f'lr={marker.get("lr_ratio", 0.0):.2f} '
+                f'tb={marker.get("tb_ratio", 0.0):.2f} '
+                f'yaw={marker.get("yaw_error", 0.0):+.2f} '
+                f'ang={marker.get("angle_deg", 0.0):+.1f} '
+                f'C={int(center_ok)} S={int(size_ok)} F={int(front_ok)}',
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.50,
@@ -1131,8 +1267,9 @@ class ArucoAlignNode(Node):
     # Timer control
     # ============================================================
     def update_control_info(self, reason, vx=0.0, vy=0.0, wz=0.0,
-                            center_ok=False, size_ok=False,
-                            err_cx=None, err_size=None):
+                            center_ok=False, size_ok=False, front_ok=False,
+                            err_cx=None, err_size=None,
+                            yaw_error=None, lr_ratio=None, tb_ratio=None, angle_deg=None):
         self.last_control_info = {
             'reason': str(reason),
             'vx': round(float(vx), 4),
@@ -1140,10 +1277,15 @@ class ArucoAlignNode(Node):
             'wz': round(float(wz), 4),
             'center_ok': bool(center_ok),
             'size_ok': bool(size_ok),
+            'front_ok': bool(front_ok),
             'done_count': int(self.done_count),
             'required_count': int(max(1, int(self.p('done_required_count')))),
             'err_cx': None if err_cx is None else round(float(err_cx), 2),
             'err_size': None if err_size is None else round(float(err_size), 2),
+            'yaw_error': None if yaw_error is None else round(float(yaw_error), 3),
+            'lr_ratio': None if lr_ratio is None else round(float(lr_ratio), 3),
+            'tb_ratio': None if tb_ratio is None else round(float(tb_ratio), 3),
+            'angle_deg': None if angle_deg is None else round(float(angle_deg), 2),
             'target_cx': round(float(self.current_target_cx()), 2),
             'target_size_px': round(float(self.p('target_size_px')), 2),
         }
@@ -1240,8 +1382,14 @@ class ArucoAlignNode(Node):
 
         size_ok = size >= target_size - size_tol
         center_ok = abs(err_cx) <= center_tol
+        front_ok, front_reason = self.front_quality_ok(marker)
 
-        if size_ok and center_ok:
+        yaw_error = float(marker.get('yaw_error', 0.0))
+        lr_ratio = float(marker.get('lr_ratio', 1.0))
+        tb_ratio = float(marker.get('tb_ratio', 1.0))
+        angle_deg = float(marker.get('angle_deg', 0.0))
+
+        if size_ok and center_ok and front_ok:
             self.done_count += 1
         else:
             self.done_count = 0
@@ -1260,14 +1408,21 @@ class ArucoAlignNode(Node):
                 wz=0.0,
                 center_ok=center_ok,
                 size_ok=size_ok,
+                front_ok=front_ok,
                 err_cx=err_cx,
-                err_size=err_size
+                err_size=err_size,
+                yaw_error=yaw_error,
+                lr_ratio=lr_ratio,
+                tb_ratio=tb_ratio,
+                angle_deg=angle_deg
             )
             self.status(
                 f'DONE aruco align | target={self.p("target_name")} '
                 f'id={marker["id"]} cx={cx:.1f}, err_cx={err_cx:.1f}, '
                 f'min_side={size:.1f}, target_size={target_size:.1f}, '
-                f'center_tol={center_tol:.1f}'
+                f'center_tol={center_tol:.1f}, '
+                f'front_ok={front_ok}, yaw_error={yaw_error:+.3f}, '
+                f'lr={lr_ratio:.2f}, tb={tb_ratio:.2f}, angle={angle_deg:+.1f}'
             )
             self.publish_debug_json(event='done', force=True)
             return
@@ -1282,6 +1437,9 @@ class ArucoAlignNode(Node):
 
         invert_y = bool(self.p('invert_y'))
 
+        # ------------------------------------------------------------
+        # 1) lateral center control: image cx error -> linear.y
+        # ------------------------------------------------------------
         vy = -kp_vy * err_cx
         if invert_y:
             vy = -vy
@@ -1298,28 +1456,50 @@ class ArucoAlignNode(Node):
         # briefly instead of stopping or continuing stale forward vx.
         self.remember_lost_recovery_direction(err_cx, vy)
 
-        vx = 0.0
-        center_first = bool(self.p('center_first'))
-
-        if center_first and not center_ok:
-            vx = 0.0
-        else:
-            if err_size > 0.0:
-                vx = kp_vx * err_size
-                vx = clamp(vx, 0.0, max_vx)
-
-                if vx > 0.0 and vx < min_vx:
-                    vx = min_vx
+        # ------------------------------------------------------------
+        # 2) rough front/yaw control: quadrilateral skew -> angular.z
+        #    기본 정책: center가 먼저 맞은 뒤에만 회전 보정한다.
+        # ------------------------------------------------------------
+        wz = 0.0
+        do_front_align = False
+        if bool(self.p('enable_front_align')) and not front_ok:
+            if bool(self.p('front_align_only_when_center_ok')):
+                do_front_align = center_ok
             else:
-                if bool(self.p('allow_reverse')):
-                    vx = -float(self.p('max_reverse_vx'))
+                do_front_align = True
+
+        if do_front_align:
+            wz = self.compute_front_wz(marker)
+            # 회전 보정 중에는 전/좌우 이동을 섞지 않는다.
+            # myAGV 급발진/혼합명령 리스크를 줄이기 위한 정책.
+            vx = 0.0
+            vy = 0.0
+        else:
+            # --------------------------------------------------------
+            # 3) distance control: marker size error -> linear.x
+            # --------------------------------------------------------
+            vx = 0.0
+            center_first = bool(self.p('center_first'))
+
+            if center_first and not center_ok:
+                vx = 0.0
+            else:
+                if err_size > 0.0:
+                    vx = kp_vx * err_size
+                    vx = clamp(vx, 0.0, max_vx)
+
+                    if vx > 0.0 and vx < min_vx:
+                        vx = min_vx
                 else:
-                    vx = 0.0
+                    if bool(self.p('allow_reverse')):
+                        vx = -float(self.p('max_reverse_vx'))
+                    else:
+                        vx = 0.0
 
         cmd = Twist()
         cmd.linear.x = float(vx)
         cmd.linear.y = float(vy)
-        cmd.angular.z = 0.0
+        cmd.angular.z = float(wz)
 
         self.cmd_pub.publish(cmd)
 
@@ -1327,11 +1507,16 @@ class ArucoAlignNode(Node):
             'ALIGNING',
             vx=vx,
             vy=vy,
-            wz=0.0,
+            wz=wz,
             center_ok=center_ok,
             size_ok=size_ok,
+            front_ok=front_ok,
             err_cx=err_cx,
-            err_size=err_size
+            err_size=err_size,
+            yaw_error=yaw_error,
+            lr_ratio=lr_ratio,
+            tb_ratio=tb_ratio,
+            angle_deg=angle_deg
         )
 
         if bool(self.p('print_debug')):
@@ -1340,9 +1525,11 @@ class ArucoAlignNode(Node):
                 f'cx={cx:.1f} err={err_cx:.1f} '
                 f'min_side={size:.1f}/{target_size:.0f} '
                 f'ratio={marker["aspect_ratio"]:.2f} '
-                f'center_ok={center_ok} size_ok={size_ok} '
+                f'center_ok={center_ok} size_ok={size_ok} front_ok={front_ok} '
+                f'front={front_reason} yaw={yaw_error:+.3f} '
+                f'lr={lr_ratio:.2f} tb={tb_ratio:.2f} angle={angle_deg:+.1f} '
                 f'done_count={self.done_count}/{required} '
-                f'-> vx={vx:.3f}, vy={vy:.3f}'
+                f'-> vx={vx:.3f}, vy={vy:.3f}, wz={wz:.3f}'
             )
 
         self.publish_debug_json(event='control')
